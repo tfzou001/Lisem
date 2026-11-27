@@ -1,0 +1,408 @@
+{
+  "schema_version": 1,
+  "id": "snap-learn",
+  "name": "Snap-Learn HK626 V1.2",
+  "chip": "ls2684",
+  "devices": {
+    "lcd": {
+      "model": "jd9853",
+      "parameters": {
+        "panel_inverted": false
+      }
+    },
+    "screen": {
+      "model": "display-panel",
+      "parameters": {
+        "viewport": {
+          "x": 0,
+          "y": 0,
+          "width": 240,
+          "height": 320
+        },
+        "rotation_clockwise": 180
+      },
+      "label": "屏幕"
+    },
+    "backlight": {
+      "model": "backlight",
+      "parameters": {
+        "active_level": 1
+      }
+    },
+    "camera": {
+      "model": "ov2659",
+      "parameters": {
+        "rotation_clockwise": 0
+      },
+      "label": "摄像头"
+    },
+    "pa": {
+      "model": "audio-amplifier",
+      "parameters": {
+        "active_level": 1
+      },
+      "label": "功放"
+    },
+    "power-hold": {
+      "model": "signal-probe",
+      "parameters": {
+        "active_level": 1
+      },
+      "label": "电源保持"
+    },
+    "sd": {
+      "model": "sd-card-slot",
+      "parameters": {
+        "bus_width": 1
+      },
+      "label": "SD 卡"
+    },
+    "battery_divider": {
+      "model": "voltage-divider",
+      "parameters": {
+        "numerator": 1,
+        "denominator": 2
+      }
+    },
+    "flash0": {
+      "model": "spi-nor",
+      "parameters": {
+        "capacity_bytes": 16777216,
+        "chip_select": 0,
+        "part": "xm25qh128c"
+      }
+    },
+    "touch": {
+      "model": "bl6138",
+      "parameters": {
+        "rotation_clockwise": 0
+      },
+      "label": "触摸屏"
+    },
+    "power": {
+      "model": "button",
+      "parameters": {
+        "pressed_level": 0,
+        "released_level": 1
+      },
+      "label": "电源键"
+    },
+    "keys": {
+      "model": "resistor-keypad",
+      "parameters": {
+        "supply_mv": 3000,
+        "pull_up_ohms": 20000,
+        "keys": [
+          {
+            "id": "ai",
+            "label": "AI",
+            "resistance_ohms": 0,
+            "diode_drop_mv": 300
+          },
+          {
+            "id": "volume-up",
+            "label": "音量加",
+            "resistance_ohms": 10000
+          },
+          {
+            "id": "back",
+            "label": "返回",
+            "resistance_ohms": 20000
+          },
+          {
+            "id": "volume-down",
+            "label": "音量减",
+            "resistance_ohms": 30000
+          }
+        ]
+      }
+    },
+    "cellular": {
+      "model": "lierda-nt26k0b1",
+      "parameters": {
+        "pwrkey_inverted": true
+      },
+      "label": "CAT.1"
+    }
+  },
+  "nets": {
+    "LCD_SCK": {
+      "endpoints": [
+        "chip.PA25",
+        "lcd.SCK"
+      ]
+    },
+    "LCD_MOSI": {
+      "endpoints": [
+        "chip.PA24",
+        "lcd.SDI"
+      ]
+    },
+    "LCD_CS": {
+      "endpoints": [
+        "chip.PA22",
+        "lcd.CS"
+      ]
+    },
+    "LCD_DC": {
+      "endpoints": [
+        "chip.PA23",
+        "lcd.DC"
+      ]
+    },
+    "LCD_RST": {
+      "endpoints": [
+        "chip.PA9",
+        "lcd.RESET"
+      ],
+      "pull": "up"
+    },
+    "LCD_TE": {
+      "endpoints": [
+        "chip.PA8",
+        "lcd.TE"
+      ]
+    },
+    "LCD_BL": {
+      "endpoints": [
+        "chip.PA0",
+        "backlight.EN"
+      ],
+      "pull": "down"
+    },
+    "DVP_MCLK": {
+      "endpoints": [
+        "chip.PA26",
+        "camera.MCLK"
+      ]
+    },
+    "DVP_PCLK": {
+      "endpoints": [
+        "chip.PA12",
+        "camera.PCLK"
+      ]
+    },
+    "DVP_HSYNC": {
+      "endpoints": [
+        "chip.PA10",
+        "camera.HSYNC"
+      ]
+    },
+    "DVP_VSYNC": {
+      "endpoints": [
+        "chip.PA11",
+        "camera.VSYNC"
+      ]
+    },
+    "DVP_D0": {
+      "endpoints": [
+        "chip.PA13",
+        "camera.D0"
+      ]
+    },
+    "DVP_D1": {
+      "endpoints": [
+        "chip.PA14",
+        "camera.D1"
+      ]
+    },
+    "DVP_D2": {
+      "endpoints": [
+        "chip.PA15",
+        "camera.D2"
+      ]
+    },
+    "DVP_D3": {
+      "endpoints": [
+        "chip.PA16",
+        "camera.D3"
+      ]
+    },
+    "DVP_D4": {
+      "endpoints": [
+        "chip.PA17",
+        "camera.D4"
+      ]
+    },
+    "DVP_D5": {
+      "endpoints": [
+        "chip.PA18",
+        "camera.D5"
+      ]
+    },
+    "DVP_D6": {
+      "endpoints": [
+        "chip.PA19",
+        "camera.D6"
+      ]
+    },
+    "DVP_D7": {
+      "endpoints": [
+        "chip.PA20",
+        "camera.D7"
+      ]
+    },
+    "POWER_KEY": {
+      "endpoints": [
+        "chip.PB4",
+        "power.OUT"
+      ],
+      "pull": "up"
+    },
+    "PA_EN": {
+      "endpoints": [
+        "chip.PA1",
+        "pa.IN"
+      ]
+    },
+    "PWR_HOLD": {
+      "endpoints": [
+        "chip.PB8",
+        "power-hold.IN"
+      ]
+    },
+    "SD_CLK": {
+      "endpoints": [
+        "chip.PA6",
+        "sd.CLK"
+      ]
+    },
+    "SD_CMD": {
+      "endpoints": [
+        "chip.PA7",
+        "sd.CMD"
+      ],
+      "pull": "up"
+    },
+    "SD_DAT0": {
+      "endpoints": [
+        "chip.PA5",
+        "sd.DAT0"
+      ],
+      "pull": "up"
+    },
+    "BAT_VCC": {
+      "endpoints": [
+        "battery_divider.IN"
+      ]
+    },
+    "BAT_VCC_DET": {
+      "endpoints": [
+        "battery_divider.OUT",
+        "chip.PB5"
+      ]
+    },
+    "I2C1_SCL": {
+      "endpoints": [
+        "chip.PB1",
+        "camera.SCL",
+        "touch.SCL"
+      ],
+      "pull": "up"
+    },
+    "I2C1_SDA": {
+      "endpoints": [
+        "chip.PB0",
+        "camera.SDA",
+        "touch.SDA"
+      ],
+      "pull": "up"
+    },
+    "TP_RESET": {
+      "endpoints": [
+        "chip.PA4",
+        "touch.RESET"
+      ],
+      "pull": "up"
+    },
+    "TP_INT": {
+      "endpoints": [
+        "chip.PA27",
+        "touch.INT"
+      ]
+    },
+    "CAM_RST": {
+      "endpoints": [
+        "chip.PA21",
+        "camera.RESET"
+      ],
+      "pull": "up"
+    },
+    "CAMERA_PDN": {
+      "endpoints": [
+        "camera.PWDN"
+      ],
+      "pull": "down"
+    },
+    "ADC_KEY": {
+      "endpoints": [
+        "chip.PB7",
+        "keys.OUT"
+      ]
+    },
+    "BAT_CHRG": {
+      "endpoints": [
+        "chip.PB2"
+      ],
+      "pull": "up"
+    },
+    "ARCS_WAKE_CAT1": {
+      "endpoints": [
+        "chip.PB3",
+        "cellular.DTR"
+      ],
+      "pull": "up"
+    },
+    "CAT_1_RESET": {
+      "endpoints": [
+        "chip.PB6",
+        "cellular.PWRKEY"
+      ],
+      "pull": "down"
+    },
+    "CAT1_WAKE_ARCS": {
+      "endpoints": [
+        "chip.PB9",
+        "cellular.RI"
+      ],
+      "pull": "up"
+    }
+  },
+  "links": [
+    {
+      "from": "lcd.pixels",
+      "to": "screen.pixels"
+    },
+    {
+      "from": "backlight.brightness",
+      "to": "screen.brightness"
+    },
+    {
+      "from": "chip.flash.data",
+      "to": "flash0.bus"
+    },
+    {
+      "from": "chip.usb0.host",
+      "to": "cellular.usb"
+    }
+  ],
+  "inputs": {
+    "battery_voltage": {
+      "type": "voltage",
+      "net": "BAT_VCC",
+      "description": "电池端电压",
+      "unit": "mV",
+      "range": {
+        "min": 0,
+        "max": 4500
+      },
+      "default": 4200
+    },
+    "charge_n": {
+      "type": "digital",
+      "net": "BAT_CHRG",
+      "description": "充电检测（低电平表示充电中）",
+      "default": true
+    }
+  }
+}

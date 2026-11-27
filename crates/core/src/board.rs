@@ -220,6 +220,8 @@ impl Board {
             ensure!(p.capacity_bytes.is_power_of_two()
                 && (65536..=16777216).contains(&p.capacity_bytes),
                 "NOR capacity must be a power of two from 64 KiB through 16 MiB");
+            ensure!(p.part.is_none() || p.capacity_bytes == NOR_BYTES as usize,
+                "XM25QH128C requires 16 MiB of storage");
             ensure!(p.chip_select <= 1 && (self.chip != "venusa" || p.chip_select == 0),
                 "Unsupported NOR chip select");
             let bus = self.linked(&format!("{id}.bus"))?;
@@ -367,7 +369,7 @@ impl Board {
                 let is_analog = models::analog(model);
                 analog |= is_analog;
                 digital |= !is_analog && model != EXTIO;
-                drivers += usize::from(models::fixed_output(model, port));
+                drivers += usize::from(models::fixed_output(model, port) || (model == "bl6138" && port == "INT"));
             }
             ensure!(drivers <= 1, "Multiple fixed drivers on net {name}");
             ensure!(
@@ -410,8 +412,8 @@ impl Board {
                     (signal == "flash.data" && target.model == "spi-nor" && input == "bus")
                         || (self.chip != "venusa"
                         && ((signal == "usb0.host"
-                            && target.model == "husb320-ba"
-                            && input == "partner")
+                            && matches!((target.model.as_str(), input),
+                                ("husb320-ba", "partner") | ("lierda-nt26k0b1", "usb")))
                             || (signal == "codec.dac"
                                 && target.model == "fs1815cn-v1"
                                 && input == "analog"))),
@@ -424,7 +426,7 @@ impl Board {
                 target.model == "display-panel"
                     && matches!(
                         (source.model.as_str(), signal, input),
-                        ("st7789" | "sc919" | "axs15231e" | "jd79651c", "pixels", "pixels") | ("backlight", "brightness", "brightness")
+                        ("st7789" | "jd9853" | "sc919" | "axs15231e" | "jd79651c", "pixels", "pixels") | ("backlight", "brightness", "brightness")
                     ),
                 "Incompatible device link: {} -> {}",
                 link.from,
@@ -436,8 +438,10 @@ impl Board {
             let address = match device.model.as_str() {
                 "ls8500" => 0x54,
                 "gc0328" => 0x21,
+                "ov2659" => 0x30,
                 "bf3901" => 0x6e,
                 "cst328" => 0x1d,
+                "bl6138" => 0x2c,
                 "fs1815cn-v1" => 0x34,
                 "sc919-touch-v1" => 0x28,
                 "axs15231e-touch-ve4" => 0x3b,
@@ -477,8 +481,12 @@ impl Board {
                     "download":false,"signals":true,"signal_trace":true,"events":false,"button_sequence":false,"audio":false}});
         }
         let assembly = self.assemble(&mut compiled)?;
-        if assembly.get("modem").is_some() {
+        if assembly["modem"].get("TX").is_some() {
             compiled["uart_channels"] = json!([0, 1]);
+        }
+        if assembly["modem"].get("usb").is_some() {
+            compiled["runtime"]["capabilities"]["usb_ecm"] = json!(true);
+            compiled["runtime"]["capabilities"]["usb_adb"] = json!(false);
         }
         compiled["assembly"] = assembly;
         crate::signals::definitions(&compiled)?;
@@ -489,15 +497,24 @@ impl Board {
         ensure!(
             self.devices
                 .values()
-                .filter(|d| matches!(d.model.as_str(), "cst328" | "sc919-touch-v1" | "axs15231e-touch-ve4"))
+                .filter(|d| matches!(d.model.as_str(), "cst328" | "bl6138" | "sc919-touch-v1" | "axs15231e-touch-ve4"))
                 .count()
                 <= 1,
             "At most one touch controller is supported"
         );
         let mut plan = compiled["assembly"].clone();
-        plan["nor"] = json!(self.flash_devices()?.iter().map(|v| json!({
-            "id":v.id,"chip_select":v.chip_select,"capacity_bytes":v.capacity_bytes
-        })).collect::<Vec<_>>());
+        let mut nor = Vec::new();
+        for flash in self.flash_devices()? {
+            let mut entry = json!({"id":flash.id,"chip_select":flash.chip_select,
+                "capacity_bytes":flash.capacity_bytes});
+            if let Some(part) = self.devices.get(&flash.id).and_then(|d| d.parameters.get("part")) {
+                if !part.is_null() {
+                    entry["part"] = part.clone();
+                }
+            }
+            nor.push(entry);
+        }
+        plan["nor"] = json!(nor);
         if let Some((id, dev)) = self.single(EXTIO)? {
             let p: Extio = serde_json::from_value(dev.parameters.clone())?;
             ensure!(
@@ -541,14 +558,15 @@ impl Board {
         plan["pulls"] = json!(pulls);
         if let Some((screen_id, screen)) = self.single("display-panel")? {
             let lcd = self.single("st7789")?;
+            let jd = self.single("jd9853")?;
             let epd = self.single("jd79651c")?;
             let qspi = self.single("sc919")?;
             let axs = self.single("axs15231e")?;
             ensure!(
-                usize::from(lcd.is_some()) + usize::from(epd.is_some()) + usize::from(qspi.is_some()) + usize::from(axs.is_some()) == 1,
+                usize::from(lcd.is_some()) + usize::from(jd.is_some()) + usize::from(epd.is_some()) + usize::from(qspi.is_some()) + usize::from(axs.is_some()) == 1,
                 "Display panel requires exactly one controller"
             );
-            let (lcd_id, lcd) = lcd.or(epd).or(qspi).or(axs).unwrap();
+            let (lcd_id, lcd) = lcd.or(jd).or(epd).or(qspi).or(axs).unwrap();
             let quad = matches!(lcd.model.as_str(), "sc919" | "axs15231e");
             ensure!(!quad || self.chip != "venusa", "QSPI panel route is unavailable on this chip");
             let epaper = lcd.model == "jd79651c";
@@ -652,10 +670,13 @@ impl Board {
                         "Unsupported video QSPI pad route for {port}");
                 }
             }
-            if epaper {
+            if jd.is_some() {
+                ensure!(pads["TE"] < 64, "JD9853 TE requires a chip pad");
+            }
+            if epaper || jd.is_some() {
                 ensure!(
                     pads.values().copied().collect::<BTreeSet<_>>().len() == 6,
-                    "Electronic paper signal pads must be distinct"
+                    "SPI panel signal pads must be distinct"
                 );
                 let routes = spi_routes(&self.chip);
                 let clock = pads["SCK"];
@@ -667,7 +688,7 @@ impl Board {
                             .iter()
                             .any(|(clocks, data_pads)| clocks & (1u64 << clock) != 0
                                 && data_pads & (1u64 << data) != 0),
-                    "Unsupported electronic-paper SPI pad route"
+                    "Unsupported SPI panel pad route"
                 );
             }
             plan["panel"] = json!({"id":screen_id,"controller_id":lcd_id,
@@ -680,6 +701,7 @@ impl Board {
         } else {
             ensure!(
                 self.single("st7789")?.is_none()
+                    && self.single("jd9853")?.is_none()
                     && self.single("sc919")?.is_none()
                     && self.single("axs15231e")?.is_none()
                     && self.single("jd79651c")?.is_none()
@@ -687,13 +709,10 @@ impl Board {
                 "Display controller and backlight require a display panel"
             );
         }
-        let parallel_camera = self.single("gc0328")?;
-        let serial_camera = self.single("bf3901")?;
-        ensure!(
-            parallel_camera.is_none() || serial_camera.is_none(),
-            "Only one camera is supported"
-        );
-        if let Some((id, camera)) = parallel_camera.or(serial_camera) {
+        let mut cameras = self.devices.iter().filter(|(_, device)|
+            matches!(device.model.as_str(), "gc0328" | "ov2659" | "bf3901"));
+        if let Some((id, camera)) = cameras.next() {
+            ensure!(cameras.next().is_none(), "Only one camera is supported");
             let p: Camera = serde_json::from_value(camera.parameters.clone())?;
             ensure!(
                 ROTATIONS.contains(&p.rotation_clockwise),
@@ -724,17 +743,50 @@ impl Board {
                     "Unsupported serial camera pad route"
                 );
             }
+            if camera.model == "ov2659" {
+                let dvp = [26, 12, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20];
+                ensure!(self.chip != "venusa" && ports[2..].iter()
+                    .zip(dvp).all(|(port, pad)| pads[port] == pad),
+                    "Unsupported OV2659 parallel camera pad route");
+            }
+            let mut pwdn_strap = None;
             for port in ["RESET", "PWDN"] {
-                if self.net(&format!("{id}.{port}")).is_some() {
-                    pads.insert(port, self.chip_pad(&format!("{id}.{port}"))?);
+                if let Some((_, net)) = self.net(&format!("{id}.{port}")) {
+                    if camera.model == "ov2659" && port == "PWDN" && net.endpoints.len() == 1 {
+                        let pull = net.pull.as_deref().context("OV2659 PWDN strap requires a pull")?;
+                        pwdn_strap = Some(pull == "up");
+                    } else {
+                        pads.insert(port, self.chip_pad(&format!("{id}.{port}"))?);
+                    }
                 }
             }
             plan["camera"] = json!({"model":camera.model,"pads":pads});
+            if let Some(level) = pwdn_strap {
+                plan["camera"]["pwdn_strap"] = json!(level);
+            }
             compiled["camera"] = json!({"model":camera.model,"width":640,"height":480,
                 "label":camera.label.as_deref().unwrap_or("摄像头"),"rotation_clockwise":p.rotation_clockwise});
         }
         for (id, device) in &self.devices {
             match device.model.as_str() {
+                "lierda-nt26k0b1" => {
+                    let p: UsbModem = serde_json::from_value(device.parameters.clone())?;
+                    ensure!(self.chip != "venusa" && plan.get("modem").is_none(),
+                        "USB modem requires one module and an LS26 USB host adapter");
+                    let target = format!("{id}.usb");
+                    let mut users = self.links.iter().filter(|link| link.from == "chip.usb0.host");
+                    ensure!(users.next().is_some_and(|link| link.to == target) && users.next().is_none(),
+                        "USB modem requires a dedicated chip.usb0.host link");
+                    for port in ["DTR", "PWRKEY", "RI"] {
+                        ensure!(self.chip_pad(&format!("{id}.{port}"))? < 64,
+                            "USB modem controls require chip pads");
+                    }
+                    plan["modem"] = json!({"id":id,"model":device.model,"usb":0,
+                        "pwrkey_inverted":p.pwrkey_inverted,
+                        "DTR":self.chip_pad(&format!("{id}.DTR"))?,
+                        "PWRKEY":self.chip_pad(&format!("{id}.PWRKEY"))?,
+                        "RI":self.chip_pad(&format!("{id}.RI"))?});
+                }
                 model if models::is_uart_modem(model) => {
                     let _: Nor = serde_json::from_value(device.parameters.clone())?;
                     ensure!(self.chip != "venusa" && plan.get("modem").is_none(),
@@ -884,7 +936,9 @@ impl Board {
                     plan["keypad"] = json!({"channel":channel,"supply_uv":p.supply_mv*1000,"pull_up_ohms":p.pull_up_ohms});
                     for key in p.keys {
                         ensure!(
-                            identifier(&key.id) && key.resistance_ohms <= 1_000_000,
+                            identifier(&key.id) && key.resistance_ohms <= 1_000_000
+                                && key.diode_drop_mv <= p.supply_mv
+                                && (key.diode_drop_mv == 0 || key.resistance_ohms == 0),
                             "Invalid keypad key"
                         );
                         let index = plan["buttons"].as_array().unwrap().len();
@@ -898,12 +952,13 @@ impl Board {
                             .as_array_mut()
                             .unwrap()
                             .push(json!({"id":key.id,"pad":pad,
-                            "pressed_level":0,"released_level":1,"resistance_ohms":key.resistance_ohms}));
+                            "pressed_level":0,"released_level":1,"resistance_ohms":key.resistance_ohms,
+                            "diode_drop_uv":key.diode_drop_mv * 1000}));
                         compiled["runtime"]["buttons"][&key.id] =
                             json!(format!("x-lisa-button-{index}"));
                     }
                 }
-                "cst328" | "sc919-touch-v1" | "axs15231e-touch-ve4" => {
+                "cst328" | "bl6138" | "sc919-touch-v1" | "axs15231e-touch-ve4" => {
                     let axs = device.model == "axs15231e-touch-ve4";
                     let (width, height, rotation) = if axs {
                         let p: AxsTouch = serde_json::from_value(device.parameters.clone())?;
@@ -921,19 +976,25 @@ impl Board {
                     let sda = self.chip_pad(&format!("{id}.SDA"))?;
                     let irq = self.chip_pad(&format!("{id}.INT"))?;
                     plan["touch"] = json!({"SCL":scl,"SDA":sda,"INT":irq});
-                    if device.model == "sc919-touch-v1" || axs {
+                    if device.model != "cst328" {
                         ensure!(
                             self.chip != "venusa",
                             "This touch controller is not supported on VenusA"
                         );
                         plan["touch"]["model"] = json!(device.model);
-                        plan["touch"]["RESET"] = json!(self.chip_pad(&format!("{id}.RESET"))?);
+                        let reset = self.chip_pad(&format!("{id}.RESET"))?;
+                        if device.model == "bl6138" {
+                            ensure!(reset < 64 && irq < 64, "BL6138 RESET and INT require chip pads");
+                            ensure!([scl, sda, irq, reset].into_iter().collect::<BTreeSet<_>>().len() == 4,
+                                    "BL6138 signal pads must be distinct");
+                        }
+                        plan["touch"]["RESET"] = json!(reset);
                     }
                     if axs {
                         plan["touch"]["width"] = json!(width);
                         plan["touch"]["height"] = json!(height);
                     }
-                    compiled["touch"] = json!({"model":device.model,"address":if axs {"0x3b"} else if device.model == "cst328" {"0x1d"} else {"0x28"},"width":width,
+                    compiled["touch"] = json!({"model":device.model,"address":if axs {"0x3b"} else if device.model == "cst328" {"0x1d"} else if device.model == "bl6138" {"0x2c"} else {"0x28"},"width":width,
                         "height":height,"rotation_clockwise":rotation,
                         "label":device.label.as_deref().unwrap_or("触摸屏")});
                     compiled["runtime"]["touch_property"] = json!("x-lisa-touch");
@@ -966,20 +1027,24 @@ impl Board {
                 "Invalid SD detect polarity"
             );
             let mut pads = BTreeMap::new();
-            for port in ["CLK", "CMD", "DAT0", "DAT1", "DAT2", "DAT3"] {
-                pads.insert(port, self.chip_pad(&format!("{id}.{port}"))?);
-            }
-            let expected = sd_pads(&self.chip);
-            for (port, expected) in ["CLK", "CMD", "DAT0", "DAT1", "DAT2", "DAT3"]
-                .iter()
-                .zip(expected)
+            let lines = match parameters.bus_width {
+                1 => 3,
+                4 => 6,
+                _ => bail!("SD bus width must be 1 or 4"),
+            };
+            for (i, (port, expected)) in ["CLK", "CMD", "DAT0", "DAT1", "DAT2", "DAT3"]
+                .into_iter().zip(sd_pads(&self.chip)).enumerate()
             {
-                ensure!(
-                    pads[port] == expected,
-                    "Unsupported SD physical pad route: {port}"
-                );
+                let endpoint = format!("{id}.{port}");
+                if i >= lines {
+                    ensure!(self.net(&endpoint).is_none(), "Unused SD lane is wired: {port}");
+                    continue;
+                }
+                let pad = self.chip_pad(&endpoint)?;
+                ensure!(pad == expected, "Unsupported SD physical pad route: {port}");
+                pads.insert(port, pad);
             }
-            plan["sd"] = json!({"pads":pads,"card_detect":false});
+            plan["sd"] = json!({"pads":pads,"bus_width":parameters.bus_width,"card_detect":false});
             if let Some((_, net)) = self.net(&format!("{id}.CD")) {
                 if net.endpoints.len() == 2 && net.endpoints.iter().any(|e| e == "chip.SD_CD") {
                     ensure!(
@@ -1087,6 +1152,7 @@ impl Board {
         let used_models = [
             "spi-nor",
             "st7789",
+            "jd9853",
             "jd79651c",
             "sc919",
             "axs15231e",
@@ -1101,14 +1167,17 @@ impl Board {
             "audio-amplifier",
             "fs1815cn-v1",
             "gc0328",
+            "ov2659",
             "bf3901",
             "sd-card-slot",
             "voltage-divider",
             "resistor-keypad",
             "cst328",
+            "bl6138",
             "sc919-touch-v1",
             "axs15231e-touch-ve4",
             "husb320-ba",
+            "lierda-nt26k0b1",
             EXTIO,
         ];
         for net in self.nets.values() {
@@ -1150,7 +1219,16 @@ struct Nor {}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+struct UsbModem {
+    #[serde(default)]
+    pwrkey_inverted: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct SerialNor {
+    #[serde(default)]
+    part: Option<NorPart>,
     #[schemars(range(min = 65536, max = 16777216))]
     capacity_bytes: usize,
     #[schemars(range(max = 1))]
@@ -1158,8 +1236,19 @@ struct SerialNor {
 }
 
 #[derive(Deserialize, JsonSchema)]
+enum NorPart {
+    #[serde(rename = "xm25qh128c")]
+    Xm25qh128c,
+}
+
+fn sd_default_width() -> u8 { 4 }
+
+#[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct Slot {
+    #[serde(default = "sd_default_width")]
+    #[schemars(schema_with = "models::sd_bus_width_schema")]
+    bus_width: u8,
     #[serde(default)]
     #[schemars(range(max = 1))]
     detect_active_level: u8,
@@ -1205,6 +1294,10 @@ struct AnalogKey {
     label: String,
     #[schemars(range(max = 1000000))]
     resistance_ohms: u32,
+    /// Forward drop for a key clamped to ground through a diode (zero series resistance).
+    #[serde(default)]
+    #[schemars(range(max = 3600))]
+    diode_drop_mv: u32,
 }
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -1399,6 +1492,28 @@ mod tests {
     }
 
     #[test]
+    fn snap_learn_compiles_physical_wiring_and_rejects_extra_sd_lanes() {
+        let mut board: Value = serde_json::from_str(include_str!("../../../boards/snap-learn.json")).unwrap();
+        let compiled = compile(&board).unwrap();
+        let plan = &compiled["assembly"];
+        assert_eq!(plan["nor"][0]["part"], "xm25qh128c");
+        assert_eq!(plan["sd"]["pads"], json!({"CLK":6,"CMD":7,"DAT0":5}));
+        assert_eq!(plan["keypad"]["channel"], 9); // PB7 = external VIN5.
+        assert_eq!(plan["camera"]["pads"]["PCLK"], 12);
+        for lane in 0..8 {
+            assert_eq!(plan["camera"]["pads"][format!("D{lane}")], 13 + lane);
+        }
+        board["nets"]["spare"] = json!({"endpoints":["sd.DAT1"]});
+        assert!(compile(&board).is_err());
+        board["nets"].as_object_mut().unwrap().remove("spare");
+        board["devices"]["sd"]["parameters"]["bus_width"] = json!(4);
+        assert!(compile(&board).is_err());
+        board["devices"]["sd"]["parameters"]["bus_width"] = json!(1);
+        board["devices"]["flash0"]["parameters"]["capacity_bytes"] = json!(8388608);
+        assert!(compile(&board).is_err());
+    }
+
+    #[test]
     fn epaper_assembly_has_real_busy_and_no_backlight() {
         let raw = epaper_board();
         let board = compile(&raw).unwrap();
@@ -1574,6 +1689,28 @@ mod tests {
             *invalid.pointer_mut(path).unwrap() = value;
             assert!(compile(&invalid).is_err(), "accepted {path}");
         }
+    }
+
+    #[test]
+    fn jd9853_bl6138_routes_and_metadata() {
+        let raw: Value = serde_json::from_str(include_str!("../../../boards/snap-learn.json")).unwrap();
+        let board = compile(&raw).unwrap();
+        let panel = &board["assembly"]["panel"];
+        assert_eq!(panel["model"], "jd9853");
+        assert_eq!(panel["pads"], json!({"SCK":25,"SDI":24,"CS":22,"DC":23,"RESET":9,"TE":8}));
+        assert_eq!(panel["rotation"], 180);
+        assert_eq!(board["assembly"]["touch"], json!({"model":"bl6138","SCL":33,"SDA":32,"INT":27,"RESET":4}));
+        assert_eq!(board["touch"]["address"], "0x2c");
+        assert_eq!(board["touch"]["rotation_clockwise"], 0);
+        let mut wrong = raw.clone();
+        let net = wrong["nets"].as_object_mut().unwrap().values_mut()
+            .find(|net| net["endpoints"].as_array().unwrap().contains(&json!("lcd.SCK"))).unwrap();
+        net["endpoints"][0] = json!("chip.PA2");
+        assert!(compile(&wrong).is_err());
+        let mut wrong = raw;
+        wrong["nets"].as_object_mut().unwrap().retain(|_, net|
+            !net["endpoints"].as_array().unwrap().contains(&json!("touch.RESET")));
+        assert!(compile(&wrong).is_err());
     }
 
     #[test]
@@ -1810,6 +1947,36 @@ mod tests {
     }
 
     #[test]
+    fn ov2659_parallel_routes_and_pwdn_strap() {
+        let mut raw = json!({"schema_version":1,"id":"ov-camera","name":"Camera",
+            "chip":"ls2684","storage":{"flash_bytes":16777216},
+            "devices":{"cam":{"model":"ov2659","parameters":{}}},
+            "nets":{"pwdn":{"endpoints":["cam.PWDN"],"pull":"down"}},"links":[]});
+        for (port, pad) in [
+            ("SCL", "PB1"), ("SDA", "PB0"), ("MCLK", "PA26"), ("PCLK", "PA12"),
+            ("VSYNC", "PA11"), ("HSYNC", "PA10"), ("RESET", "PA21"),
+            ("D0", "PA13"), ("D1", "PA14"), ("D2", "PA15"), ("D3", "PA16"),
+            ("D4", "PA17"), ("D5", "PA18"), ("D6", "PA19"), ("D7", "PA20"),
+        ] {
+            raw["nets"][port] = json!({"endpoints":[format!("cam.{port}"),format!("chip.{pad}")]});
+        }
+        let board = compile(&raw).unwrap();
+        assert_eq!(board["camera"]["model"], "ov2659");
+        assert_eq!(board["assembly"]["camera"]["pwdn_strap"], false);
+        assert_eq!(board["assembly"]["camera"]["pads"]["RESET"], 21);
+        raw["nets"]["pwdn"]["pull"] = json!("up");
+        assert_eq!(compile(&raw).unwrap()["assembly"]["camera"]["pwdn_strap"], true);
+        raw["nets"]["D1"]["endpoints"][1] = json!("chip.PA4");
+        assert!(compile(&raw).is_err());
+        raw["nets"]["D1"]["endpoints"][1] = json!("chip.PA14");
+        raw["devices"]["other"] = json!({"model":"gc0328","parameters":{}});
+        assert!(compile(&raw).is_err());
+        raw["devices"].as_object_mut().unwrap().remove("other");
+        raw["devices"]["cam"]["parameters"]["address"] = json!(48);
+        assert!(compile(&raw).is_err());
+    }
+
+    #[test]
     fn serial_camera_assembly_validates_ports_and_routes() {
         let mut raw = json!({"schema_version":1,"id":"serial-camera","name":"Camera",
             "chip":"ls2684","storage":{"flash_bytes":16777216},
@@ -1888,6 +2055,33 @@ mod tests {
     }
 
     use std::path::Path;
+
+    #[test]
+    fn usb_modem_reserves_usb_host_and_preserves_uart_channels() {
+        let raw = json!({"schema_version":1,"id":"usb-modem","name":"Modem",
+            "chip":"ls2684","storage":{"flash_bytes":16777216},
+            "devices":{"m":{"model":"lierda-nt26k0b1","parameters":{"pwrkey_inverted":true}}},
+            "nets":{"wake":{"endpoints":["chip.PB3","m.DTR"]},
+                    "pwr":{"endpoints":["chip.PB6","m.PWRKEY"]},
+                    "ri":{"endpoints":["m.RI","chip.PB9"]}},
+            "links":[{"from":"chip.usb0.host","to":"m.usb"}]});
+        let board = compile(&raw).unwrap();
+        assert_eq!(board["uart_channels"], json!([0,1,2]));
+        assert_eq!(board["runtime"]["capabilities"]["usb_adb"], false);
+        assert_eq!(board["assembly"]["modem"], json!({"id":"m","model":"lierda-nt26k0b1",
+            "usb":0,"DTR":35,"PWRKEY":38,"RI":41,"pwrkey_inverted":true}));
+        for (path, value) in [
+            ("/links", json!([])),
+            ("/links/0/from", json!("chip.uart2")),
+            ("/nets/ri/endpoints/0", json!("m.RING")),
+            ("/devices/m/parameters", json!({"usb_mode":"rndis"})),
+            ("/chip", json!("venusa")),
+        ] {
+            let mut bad = raw.clone();
+            *bad.pointer_mut(path).unwrap() = value;
+            assert!(compile(&bad).is_err(), "accepted {path}");
+        }
+    }
 
     #[test]
     fn modem_routes_reserve_the_uart_and_reject_unsupported_wiring() {

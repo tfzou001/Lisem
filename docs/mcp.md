@@ -15,7 +15,7 @@
 | `lisem_flash_write`、`lisem_flash_erase`、`lisem_uid_regenerate` | 管理 Flash 和身份 |
 | `lisem_power_on`、`lisem_power_off`、`lisem_reset`、`lisem_shutdown` | 控制电源、复位和宿主端点 |
 | `lisem_button` | 对板级按键发送按下、松开 |
-| `lisem_modem` | 观察 UART 模组或改变当前运行的 SIM 插入状态 |
+| `lisem_modem` | 观察蜂窝模组、改变 SIM 插入状态或切换 USB ECM 桥接 |
 | `lisem_rotary` | 转动正交编码器，查询或取消指定转动序列 |
 | `lisem_signal_trace` | 查询数字源，采集和读取虚拟时间下的电平边沿 |
 | `lisem_button_sequence` | 按虚拟时间执行长按、连按 |
@@ -225,10 +225,14 @@ Flash 擦除和 UID 重新生成要求下电并提供当前 `confirm_uid`；UID 
 
 需要命令行工作流或 DAC 文件录制时，见[命令行自动化](automation.md)。
 
-## UART 模组
+## 蜂窝模组
 
 `lisem_modem` 要求 `id`、当前 `run` 和板型器件 ID `modem`。
-省略 `sim_present` 只观察；提供布尔值改变 SIM 状态，返回已应用的模型状态。
+只提供上述标识可读取状态。设置 `sim_present` 改变本轮 SIM 状态。
+USB ECM 模组也支持 `network_enabled`。每次只设置一个布尔值，并携带查询
+返回的 `usb_generation`。
+
+对于 UART 模组，
 拔卡解除 PDP 并断开真实 socket，不生成未经验证的 SIM 热插拔 URC。
 网络转发要求 `lisem_start` 的 `network=true`，固件负责 AT 和业务协议。
 [模型范围](devices/modems.md)与实际返回的网络状态须分别判断。

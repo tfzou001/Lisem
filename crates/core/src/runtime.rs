@@ -507,6 +507,11 @@ impl Session {
             options.download,
             options.capture.is_some(),
         )?;
+        if backend.capabilities.usb_ecm {
+            command.env("LISEM_MODEM_NETWORK_LIBRARY", assets.network());
+        } else {
+            command.env_remove("LISEM_MODEM_NETWORK_LIBRARY");
+        }
         let board_plan = if let Some(plan) = item["hardware"]["board"].get("assembly") {
             if options.capture.is_some() {
                 let path = output.join("board.json");
@@ -733,6 +738,14 @@ impl Session {
         session.qmp.call("cont", json!({}), &mut session.uart)?;
         Ok(session)
     }
+    fn modem_status(&mut self, id: &str) -> Result<Value> {
+        let raw = self.qmp.get("x-lisem-modem-status", &mut self.uart)?;
+        let mut status: Value = serde_json::from_str(raw.as_str().context("Invalid modem state")?)?;
+        status["id"] = json!(id);
+        status["run"] = json!(self.output);
+        Ok(status)
+    }
+
     fn capture(&mut self) -> Result<()> {
         if self.backend.capabilities.snapshot {
             let snapshot = self.qmp.get("x-lisa-snapshot", &mut self.uart)?;
@@ -1718,15 +1731,27 @@ impl Runtime {
                 ensure!(params["modem"].as_str() == Some(device), "Unknown modem device");
                 let session = self.session.as_mut().filter(|s| !s.finished)
                     .context("Instance is not running")?;
-                if let Some(present) = params.get("sim_present") {
-                    ensure!(present.is_boolean(), "SIM presence must be boolean");
-                    session.qmp.set("x-lisem-modem-sim-present", present.clone(), &mut session.uart)?;
+                let sim = params.get("sim_present");
+                let network = params.get("network_enabled");
+                let generation = params.get("usb_generation");
+                ensure!(!matches!((sim, network), (Some(_), Some(_))), "Change one modem setting per request");
+                if let Some(value) = sim.or(network) {
+                    ensure!(value.is_boolean(), "Modem setting must be boolean");
+                    if capabilities.usb_ecm {
+                        let generation = generation.and_then(Value::as_u64)
+                            .context("USB modem changes require the observed usb_generation")?;
+                        let field = if sim.is_some() { "sim_present" } else { "network_enabled" };
+                        let mut change = json!({"usb_generation": generation});
+                        change[field] = value.clone();
+                        session.qmp.set("x-lisem-nt26-control", json!(change.to_string()), &mut session.uart)?;
+                    } else {
+                        ensure!(network.is_none() && generation.is_none(), "USB ECM control unavailable");
+                        session.qmp.set("x-lisem-modem-sim-present", value.clone(), &mut session.uart)?;
+                    }
+                } else {
+                    ensure!(generation.is_none(), "USB generation requires a modem change");
                 }
-                let raw = session.qmp.get("x-lisem-modem-status", &mut session.uart)?;
-                let mut state: Value = serde_json::from_str(raw.as_str().context("Invalid modem state")?)?;
-                state["run"] = json!(session.output);
-                state["id"] = json!(device);
-                Ok(state)
+                session.modem_status(device)
             }
             "status" => self.status(),
             "start" => {

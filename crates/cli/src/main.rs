@@ -124,7 +124,7 @@ enum Action {
     ButtonSequence(ButtonSequenceArgs),
     /// Rotate a quadrature encoder or inspect/cancel its virtual-time sequence.
     Rotary(RotaryArgs),
-    /// Observe a board modem or change its SIM presence for the current run.
+    /// Observe a modem, change SIM presence, or switch its USB ECM internet bridge.
     Modem {
         id: String,
         modem: String,
@@ -132,6 +132,11 @@ enum Action {
         run: String,
         #[arg(long, action=clap::ArgAction::Set)]
         sim_present: Option<bool>,
+        #[arg(long, action=clap::ArgAction::Set, conflicts_with="sim_present")]
+        network_enabled: Option<bool>,
+        /// USB generation from the current modem status.
+        #[arg(long)]
+        usb_generation: Option<u64>,
     },
     /// Inspect typed board inputs, or set a JSON object of values (null restores defaults).
     Signals { id: String, #[arg(long)] set: Option<String>, #[arg(long)] run: Option<String> },
@@ -610,9 +615,11 @@ fn run() -> Result<i32> {
         )?,
         Action::Logs(LogsArgs { id, channel, cursor, limit }) => manager.call("uart_read", json!({"id":id,"channel":channel,"cursor":cursor,"limit":limit}))?,
         Action::Shutdown { id } => manager.call("shutdown", json!({"id": id}))?,
-        Action::Modem { id, modem, run, sim_present } => {
+        Action::Modem { id, modem, run, sim_present, network_enabled, usb_generation } => {
             let mut params = json!({"id":id,"modem":modem,"run":run});
             if let Some(present) = sim_present { params["sim_present"] = json!(present); }
+            if let Some(enabled) = network_enabled { params["network_enabled"] = json!(enabled); }
+            if let Some(generation) = usb_generation { params["usb_generation"] = json!(generation); }
             manager.call("modem", params)?
         }
         Action::Runtime { .. } | Action::Bridge | Action::Mcp | Action::Rpc => unreachable!(),

@@ -119,11 +119,14 @@ WAV 绝对 `path`，access_point 提供 bool `enabled`，power_off 排在最后�
 `DeliveryUnknown`。复位、下电及 Run 关闭取消旧输入。预置热点动作只影响
 本轮可用性，持久化使用 Wi-Fi 接口。WAV 注入与录制见[观测与采集](observations.md)。
 
-## UART 模组
+## 蜂窝模组
 
-`run.modem(modem, *, sim_present=None)` 返回板型器件的状态字典。
+`run.modem(modem, *, sim_present=None, network_enabled=None, usb_generation=None)` 返回板型器件的状态字典。
 `modem` 为器件 ID；省略 `sim_present` 仅观察，布尔值改变本轮 SIM 插入状态。
-拔卡关闭真实 socket 并解除 PDP，返回不代表固件已处理拔卡。
+USB ECM 模组支持在当前运行切换 `network_enabled`。读取状态取得
+`usb_generation`，改变 SIM 或桥接时携带该值，每次只改变一项。
+
+对于 UART 模组，拔卡关闭真实 socket 并解除 PDP，返回不代表固件已处理拔卡。
 状态包含 `run`、`id`、`sim_present`、`registered`、`pdp_active`、
 `host_network`、`baud`、`connected_sockets`、UART 字节计数和溢出标志。
 宿主网络须在运行创建时显式启用。当前 ML307C 模型提供 IPv4 TCP／UDP

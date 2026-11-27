@@ -6,13 +6,13 @@ export CARGO_TARGET_DIR
 .NOTPARALLEL:
 
 QEMU_TESTS := \
-    qemu-board qemu-pwm-led qemu-ls8500 qemu-fs1815 qemu-extio qemu-typec qemu-adc qemu-aes qemu-aon-timer qemu-audio qemu-bluetooth \
+    qemu-board qemu-hk626-display qemu-ov2659 qemu-pwm-led qemu-ls8500 qemu-fs1815 qemu-extio qemu-typec qemu-adc qemu-aes qemu-aon-timer qemu-audio qemu-bluetooth \
     qemu-ble-central qemu-bluetooth-aes qemu-bluetooth-activity qemu-bluetooth-history qemu-bluetooth-link qemu-bluetooth-rx qemu-calendar qemu-bf3901 qemu-camera qemu-camera-capture qemu-camera-input \
     qemu-clock-notify qemu-counter-chain qemu-cpu qemu-cpu-clocks \
     qemu-ecc qemu-events qemu-desktop qemu-display qemu-epd qemu-dsp qemu-dma qemu-dma2d qemu-dma2d-memory qemu-dualtimer qemu-dvp-clock \
     qemu-gpio qemu-host-audio qemu-host-display qemu-display-capture qemu-host-network qemu-host-network-capture \
     qemu-hsu qemu-i2c qemu-icount qemu-jit-state qemu-jpeg qemu-jpeg-encode \
-    qemu-mailbox qemu-ml307 qemu-pacing qemu-psram qemu-remap qemu-rf \
+    qemu-mailbox qemu-ml307 qemu-nt26 qemu-pacing qemu-psram qemu-remap qemu-rf \
     qemu-rom qemu-rotary qemu-sd qemu-serial qemu-qspi qemu-axs15231e qemu-sc919 qemu-sc919-touch qemu-signals qemu-signal-trace qemu-soc-clocks qemu-storage \
     qemu-sysctl qemu-touch qemu-trng qemu-uart qemu-usb qemu-usb-lab qemu-usb-adb \
     qemu-venusa qemu-watchdog qemu-watchpoint qemu-wifi qemu-wifi-ap qemu-wifi-disconnect qemu-wifi-environment \

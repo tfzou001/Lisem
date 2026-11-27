@@ -30,6 +30,11 @@ pub(super) fn is_uart_modem(id: &str) -> bool {
 
 const MODELS: &[Model] = &[
     Model {
+        id: "lierda-nt26k0b1", category: "network",
+        description: "NT26 USB cellular modem with vendor AT and CDC Ethernet interfaces",
+        ports: &["DTR", "PWRKEY", "RI"],
+    },
+    Model {
         id: "ml307c-gc-cn", category: "network",
         description: "ML307C UART AT subset with bounded TCP/UDP host transport",
         ports: &["TX", "RX"],
@@ -65,6 +70,11 @@ const MODELS: &[Model] = &[
         category: "input",
         description: "Ideal two-phase rotary encoder with virtual-time contact transitions",
         ports: &["A", "B"],
+    },
+    Model {
+        id: "jd9853", category: "display",
+        description: "Four-wire SPI 240x320 RGB565 GRAM controller with vertical TE",
+        ports: &["SCK", "SDI", "CS", "DC", "RESET", "TE"],
     },
     Model {
         id: "st7789",
@@ -115,6 +125,20 @@ const MODELS: &[Model] = &[
             "SCL", "SDA", "MCLK", "PCLK", "HSYNC", "VSYNC", "D0", "D1", "D2", "D3", "D4", "D5",
             "D6", "D7", "PWDN", "RESET",
         ],
+    },
+    Model {
+        id: "ov2659",
+        category: "camera",
+        description: "16-bit SCCB camera sensor with 8-bit parallel YUYV output",
+        ports: &[
+            "SCL", "SDA", "MCLK", "PCLK", "HSYNC", "VSYNC", "D0", "D1", "D2", "D3", "D4", "D5",
+            "D6", "D7", "PWDN", "RESET",
+        ],
+    },
+    Model {
+        id: "bl6138", category: "input",
+        description: "Single-contact I2C touch controller with internal flash programmer",
+        ports: &["SCL", "SDA", "INT", "RESET"],
     },
     Model {
         id: "cst328",
@@ -209,14 +233,14 @@ fn parameter_schema(id: &str) -> Value {
     match id {
         "spi-nor" => schema!(SerialNor),
         "fs1815cn-v1" | "ls8500" | "ml307c-gc-cn" => schema!(Nor),
-        "st7789" | "sc919" => schema!(Controller),
+        "st7789" | "jd9853" | "sc919" => schema!(Controller),
         "axs15231e" => schema!(AxsController),
         "axs15231e-touch-ve4" => schema!(AxsTouch),
         "jd79651c" => schema!(Epaper),
         "display-panel" => schema!(Panel),
         "backlight" => schema!(Active),
-        "gc0328" | "bf3901" => schema!(Camera),
-        "cst328" | "sc919-touch-v1" => schema!(Touch),
+        "ov2659" | "gc0328" | "bf3901" => schema!(Camera),
+        "cst328" | "bl6138" | "sc919-touch-v1" => schema!(Touch),
         "button" => schema!(Button),
         "quadrature-encoder" => schema!(Rotary),
         "hold-reset" => schema!(HoldReset),
@@ -225,6 +249,7 @@ fn parameter_schema(id: &str) -> Value {
         "voltage-divider" => schema!(Divider),
         "sd-card-slot" => schema!(Slot),
         EXTIO => schema!(Extio),
+        "lierda-nt26k0b1" => schema!(UsbModem),
         "husb320-ba" => schema!(TypeC),
         _ => unreachable!(),
     }
@@ -262,13 +287,15 @@ fn example(id: &str) -> Value {
     match id {
         "spi-nor" => json!({"capacity_bytes":8388608,"chip_select":0}),
         "fs1815cn-v1" | "ls8500" | "ml307c-gc-cn" => json!({}),
+        "jd9853" => json!({"panel_inverted":false}),
         "st7789" | "sc919" | "axs15231e" => json!({"panel_inverted":true}),
         "jd79651c" => json!({}),
         "display-panel" => {
             json!({"viewport":{"x":0,"y":0,"width":240,"height":240},"rotation_clockwise":90})
         }
         "backlight" | "audio-amplifier" | "signal-probe" => json!({"active_level":1}),
-        "gc0328" | "bf3901" => json!({"rotation_clockwise":90}),
+        "ov2659" | "gc0328" | "bf3901" => json!({"rotation_clockwise":90}),
+        "bl6138" => json!({"rotation_clockwise":0}),
         "cst328" | "sc919-touch-v1" => json!({"rotation_clockwise":270}),
         "axs15231e-touch-ve4" => json!({"width":180,"height":720,"rotation_clockwise":270}),
         "button" => json!({"pressed_level":0,"released_level":1}),
@@ -281,6 +308,7 @@ fn example(id: &str) -> Value {
         "voltage-divider" => json!({"numerator":2,"denominator":5}),
         "sd-card-slot" => json!({"detect_active_level":0}),
         EXTIO => json!({"address":extio_address()}),
+        "lierda-nt26k0b1" => json!({"pwrkey_inverted":false}),
         "husb320-ba" => json!({"address":typec_address()}),
         _ => unreachable!(),
     }
@@ -291,14 +319,15 @@ pub(super) fn fixed_output(model: &str, port: &str) -> bool {
         (model, port),
         ("button" | "resistor-keypad" | "voltage-divider", "OUT")
             | ("ml307c-gc-cn", "TX")
+            | ("lierda-nt26k0b1", "RI")
             | ("quadrature-encoder", "A" | "B")
             | ("hold-reset", "RESET_N")
-            | ("st7789" | "sc919" | "axs15231e", "TE")
+            | ("st7789" | "jd9853" | "sc919" | "axs15231e", "TE")
             | ("jd79651c", "BUSY")
             | ("cst328" | "sc919-touch-v1" | "axs15231e-touch-ve4" | "ls8500", "INT")
             | ("husb320-ba", "INT_N" | "ID")
             | (
-                "gc0328" | "bf3901",
+                "ov2659" | "gc0328" | "bf3901",
                 "PCLK" | "HSYNC" | "VSYNC" | "D0" | "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7"
             )
     )
@@ -315,7 +344,7 @@ fn signals(m: &Model) -> Vec<Value> {
             let direction = if fixed_output(m.id, port) || (m.id == "sd-card-slot" && *port == "CD")
             {
                 "output"
-            } else if *port == "SDA"
+            } else if (m.id == "bl6138" && *port == "INT") || *port == "SDA"
                 || (m.id == EXTIO && port.starts_with('P'))
                 || (m.id == "sd-card-slot" && *port != "CLK")
             {
@@ -326,9 +355,9 @@ fn signals(m: &Model) -> Vec<Value> {
             let kind = if analog(m.id) { "voltage" } else { "digital" };
             let required = !matches!(
                 (m.id, *port),
-                ("gc0328" | "bf3901", "PWDN" | "RESET")
+                ("ov2659" | "gc0328" | "bf3901", "PWDN" | "RESET")
                     | ("husb320-ba", "INT_N" | "ID")
-                    | ("sd-card-slot", "CD")
+                    | ("sd-card-slot", "CD" | "DAT1" | "DAT2" | "DAT3")
             ) && !(m.id == EXTIO && port.starts_with('P'));
             json!({"name":port,"direction":direction,"kind":kind,"required":required})
         })
@@ -339,9 +368,10 @@ fn links(id: &str) -> Value {
     match id {
         "spi-nor" => json!({"inputs":["bus"],"sources":["chip.flash.data"]}),
         "fs1815cn-v1" => json!({"inputs":["analog"],"sources":["chip.codec.dac"]}),
-        "st7789" | "sc919" | "axs15231e" | "jd79651c" => json!({"outputs":["pixels"]}),
+        "st7789" | "jd9853" | "sc919" | "axs15231e" | "jd79651c" => json!({"outputs":["pixels"]}),
         "backlight" => json!({"outputs":["brightness"]}),
         "display-panel" => json!({"inputs":["pixels","brightness"]}),
+        "lierda-nt26k0b1" => json!({"inputs":["usb"],"sources":["chip.usb0.host"]}),
         "husb320-ba" => json!({"inputs":["partner"],"sources":["chip.usb0.host"]}),
         _ => json!({}),
     }
@@ -349,6 +379,11 @@ fn links(id: &str) -> Value {
 
 fn constraints(id: &str) -> Value {
     match id {
+        "lierda-nt26k0b1" => json!([
+            "One dedicated LS26 USB host port; AT on interface 3 and CDC ECM Ethernet.",
+            "Active-low PWRKEY; select inversion for an inverting board driver.",
+            "Ideal cellular registration with SIM present. External IP traffic requires the host bridge."
+        ]),
         "ml307c-gc-cn" => json!([
             "One module; dedicated point-to-point LS26 UART2 nets, module TX/RX to PA8/PA9 or PB7/PB6; firmware selects AF4.",
             "8N1, no flow control; 115200 at module reset, IPR supports 460800 and 921600.",
@@ -359,7 +394,8 @@ fn constraints(id: &str) -> Value {
         "spi-nor" => json!([
             "Capacity is a power of two from 64 KiB through 16 MiB; 24-bit addressing only.",
             "CS0 uses the dedicated select. LS26 CS1 requires PA11; firmware configures PinMux.",
-            "Each populated device has its own persistent binary image."
+            "Each populated device has its own persistent binary image.",
+            "Part xm25qh128c selects the 16 MiB XMC NOR identification."
         ]),
         "ls8500" => json!(["One sensor per board; fixed I2C address 0x54 and active-low INT.",
             "Ideal IR-free 5600 K white-LED scene, 0..60000 lux; no spectral or noise calibration.",
@@ -399,13 +435,13 @@ fn constraints(id: &str) -> Value {
             "RGB565 writes and vertical TE only; reads and dual-lane mode are unsupported.",
             "Viewport must fit 240x320 controller RAM; scan resolution is fixed."
         ]),
-        "st7789" | "backlight" => json!([
+        "st7789" | "jd9853" | "backlight" => json!([
             "One controller, one panel and one backlight must be connected together.",
             "Connect controller.pixels to panel.pixels and backlight.brightness to panel.brightness.",
             "Viewport must fit 240x320 controller RAM; width and height must be positive."
         ]),
         "display-panel" => json!([
-            "One pixel source is required; ST7789 requires a backlight, JD79651C forbids a brightness link.",
+            "One pixel source is required. LCD controllers require a backlight. JD79651C forbids a brightness link.",
             "Viewport must fit the selected controller RAM; rotation describes physical mounting."
         ]),
         "jd79651c" => json!([
@@ -421,6 +457,12 @@ fn constraints(id: &str) -> Value {
             "Single-lane raw and processed-raw Bayer output, PLL bypass and crop; other serializers and subsampling are unsupported.",
             "Host supplies a 640x480 RGB888 optical scene, center-cropped to the sensor array. Analog image processing is idealized; no analog image-quality calibration is modeled.",
             "PWDN and RESET are optional; absent host input produces no frames."
+        ]),
+        "ov2659" => json!([
+            "One camera per board, SCCB address 0x30, 16-bit register addresses and 8-bit data.",
+            "D0 through D7 carry sensor outputs D2 through D9 on the LS26 DVP route.",
+            "Active-low RESET and active-high PWDN are optional; PWDN can also use a static pull.",
+            "YUYV 400x300, 320x240 and 1280x960 centered presets; ideal post-ISP 640x480 RGB888 input or sensor color bars. Analog exposure, lens and color tuning are idealized."
         ]),
         "gc0328" => json!([
             "One camera per board; SCCB slave address is fixed at 0x21.",
@@ -438,6 +480,11 @@ fn constraints(id: &str) -> Value {
             "One touch controller per board, fixed I2C address 0x28 and active-low RESET/INT.",
             "Normal scan mode with 6x8 active and 2x8 reference channels, plus requested frequency scans; other geometries and SWK are unsupported.",
             "Ideal AFE uses 20 ms scans, 100 us notification pulses and local electrode coupling; these are model parameters, not measured panel timing."
+        ]),
+        "bl6138" => json!([
+            "One controller per board, fixed I2C address 0x2c and 240x320 sensor coordinates.",
+            "INT signals contact changes and is driven low by the host for flash programming.",
+            "Firmware supplies the flash contents through the programmer. Reset retains the 32 KiB image."
         ]),
         "cst328" => json!(["One touch controller per board; I2C address is fixed at 0x1d."]),
         "button" => json!([
@@ -458,7 +505,7 @@ fn constraints(id: &str) -> Value {
             "Numerator and denominator must be positive and numerator must not exceed denominator."
         ]),
         "sd-card-slot" => json!([
-            "One SD slot per board; CLK/CMD/DAT0..3 use the chip's fixed SD routes.",
+            "One SD slot per board; CLK/CMD/DAT0 are required. DAT1..3 are required at width 4 (default) and disconnected at width 1.",
             "CD is optional; connect to a GPIO/expander or the supported controller detection input.",
             "Card image insertion is independent of a mechanical detection signal."
         ]),
@@ -480,7 +527,7 @@ fn describe(m: &Model, details: bool) -> Value {
         value["signals"] = json!(signals(m));
         value["supported_chips"] = if matches!(
             m.id,
-            "hold-reset" | "bf3901" | "resistor-keypad" | "fs1815cn-v1" | "sc919" | "axs15231e" | "sc919-touch-v1" | "axs15231e-touch-ve4" | "pwm-led" | "ls8500" | "ml307c-gc-cn"
+            "bl6138" | "hold-reset" | "ov2659" | "bf3901" | "resistor-keypad" | "fs1815cn-v1" | "sc919" | "axs15231e" | "sc919-touch-v1" | "axs15231e-touch-ve4" | "pwm-led" | "ls8500" | "ml307c-gc-cn" | "lierda-nt26k0b1"
         ) {
             json!(["ls2663", "ls2684"])
         } else {
@@ -542,6 +589,10 @@ pub fn query_models(query: &ModelQuery) -> Result<Value> {
     )
 }
 
+pub(super) fn sd_bus_width_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({"type":"integer", "enum":[1,4]})
+}
+
 pub(super) fn rotation_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
     schemars::json_schema!({"type":"integer", "enum":ROTATIONS,
         "description":"Physical installation rotation, clockwise degrees."})
@@ -570,13 +621,15 @@ fn data_signals(id: &str) -> Value {
         "fs1815cn-v1" => json!([{"name":"analog","direction":"input",
             "kind":"analog-audio","required":true,"sources":["chip.codec.dac"],
             "chips":["ls2663","ls2684"]}]),
-        "st7789" | "sc919" | "axs15231e" | "jd79651c" => json!([{"name":"pixels","direction":"output","kind":"pixels","required":true}]),
+        "st7789" | "jd9853" | "sc919" | "axs15231e" | "jd79651c" => json!([{"name":"pixels","direction":"output","kind":"pixels","required":true}]),
         "backlight" => {
             json!([{"name":"brightness","direction":"output","kind":"brightness","required":true}])
         }
         "display-panel" => json!([
             {"name":"pixels","direction":"input","kind":"pixels","required":true},
             {"name":"brightness","direction":"input","kind":"brightness","required":false}]),
+        "lierda-nt26k0b1" => json!([{"name":"usb","direction":"input","kind":"usb-device",
+            "required":true,"sources":["chip.usb0.host"],"chips":["ls2663","ls2684"]}]),
         "husb320-ba" => {
             json!([{"name":"partner","direction":"input","kind":"usb-host-partner","required":false,
             "sources":["chip.usb0.host"],"chips":["ls2663","ls2684"]}])
@@ -588,8 +641,10 @@ fn data_signals(id: &str) -> Value {
 fn interfaces(id: &str) -> Value {
     let address = match id {
         "gc0328" => Some(0x21),
+        "ov2659" => Some(0x30),
         "bf3901" => Some(0x6e),
         "cst328" => Some(0x1d),
+        "bl6138" => Some(0x2c),
         "fs1815cn-v1" => Some(0x34),
         "sc919-touch-v1" => Some(0x28),
         "axs15231e-touch-ve4" => Some(0x3b),
@@ -597,10 +652,12 @@ fn interfaces(id: &str) -> Value {
         _ => None,
     };
     if let Some(address) = address {
-        return json!([{ "protocol":if matches!(id, "gc0328" | "bf3901") {"sccb"} else {"i2c"},
+        return json!([{ "protocol":if matches!(id, "ov2659" | "gc0328" | "bf3901") {"sccb"} else {"i2c"},
             "address_7bit":address,"clock":"SCL","data":"SDA" }]);
     }
     match id {
+        "lierda-nt26k0b1" => json!([{"protocol":"usb","port":"usb","vid":0x3505,
+            "pid":3,"at_interface":3,"network_class":"cdc-ecm"}]),
         "ml307c-gc-cn" => json!([{"protocol":"uart","TX":"TX","RX":"RX",
             "frame":"8N1","initial_baud":115200,"baud_rates":[115200,460800,921600],
             "flow_control":false}]),
@@ -612,7 +669,7 @@ fn interfaces(id: &str) -> Value {
         "sc919" | "axs15231e" => {
             json!([{"protocol":"qspi","clock":"SCK","data":["D0","D1","D2","D3"],"select":"CS"}])
         }
-        "st7789" | "jd79651c" => json!([{"protocol":"spi","clock":"SCK","data":"SDI","select":"CS"}]),
+        "st7789" | "jd9853" | "jd79651c" => json!([{"protocol":"spi","clock":"SCK","data":"SDI","select":"CS"}]),
         _ => json!([]),
     }
 }
@@ -681,7 +738,7 @@ mod tests {
             ..Default::default()
         };
         let result = query_models(&category).unwrap();
-        assert_eq!(result["models"].as_array().unwrap().len(), 2);
+        assert_eq!(result["models"].as_array().unwrap().len(), 3);
         assert!(result["models"].as_array().unwrap().iter().any(|m| m["model"] == "bf3901"));
         assert!(result["models"][0].get("parameter_schema").is_none());
         let exact = query_models(&ModelQuery {

@@ -318,6 +318,41 @@ def analog_keypad():
         m.close()
 
 
+def hk626_storage_and_keys():
+    from run_qemu_storage import command as flash_command
+
+    keys = [('ai', 0), ('volume-up', 10000), ('back', 20000), ('volume-down', 30000)]
+    board = {'version': 1, 'chip': 'ls2684', 'indicators': [],
+             'nor': [{'id': 'flash0', 'capacity_bytes': 16 << 20,
+                      'chip_select': 0, 'part': 'xm25qh128c'}],
+             'keypad': {'channel': 9, 'supply_uv': 3000000, 'pull_up_ohms': 20000},
+             'buttons': [{'id': name, 'pad': 39, 'pressed_level': 0, 'released_level': 1,
+                          'resistance_ohms': r} for name, r in keys]}
+    board['buttons'][0]['diode_drop_uv'] = 300000
+    m = Machine(OUTPUT / 'hk626-storage-keys', board='arcs-board', assembly=board, desktop=True)
+    try:
+        # A battery/charger update must preserve the idle 3 V keypad pull-up.
+        m.qmp_command('qom-set', {'path': '/machine', 'property': 'x-lisa-signals',
+                      'value': json.dumps({'pads': {'34': True}, 'adc_uv': {'7': 2100000}})})
+        m.write(0x46600004, 8)
+        m.write(0x46600010, 1 << 9)
+        m.write(0x46600000, 1)
+        assert m.read(0x466000b0 + 9 * 4) == 853
+        assert flash_command(m, 0x9f, length=3) == bytes.fromhex('204018')
+        assert flash_command(m, 0x90, length=2) == bytes.fromhex('2017')
+        for index, millivolts in enumerate((300, 1000, 1500, 1800)):
+            prop = {'path': '/machine', 'property': f'x-lisa-button-{index}'}
+            m.qmp_command('qom-set', {**prop, 'value': True})
+            m.write(0x46600004, 8)
+            m.write(0x46600010, 1 << 9)
+            m.write(0x46600000, 1)
+            code = m.read(0x466000b0 + 9 * 4)
+            assert abs(code * 3600 / 1023 - millivolts) <= 4
+            m.qmp_command('qom-set', {**prop, 'value': False})
+    finally:
+        m.close()
+
+
 if __name__ == '__main__':
     hold_reset()
     screen_and_buttons()
@@ -326,3 +361,4 @@ if __name__ == '__main__':
     venusa_camera()
     venusa_camera(subsample=True)
     analog_keypad()
+    hk626_storage_and_keys()

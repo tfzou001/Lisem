@@ -38,6 +38,16 @@ def functional(hart):
             assert not value & ((1 << 23) | 2)  # SPI/UART gates remain off.
         assert m.read(CMN + 4) == m.read(CMN + 12) == 0
         assert m.read(AON + 0x54) == 1
+        m.write(AON + 0x10, 0)
+        assert m.read(AON + 0x10) == 0
+        m.write(AON + 0x20, 0xffffffff)
+        assert m.read(AON + 0x20) == 0 and m.read(AON + 0x24) == 0
+        assert m.read(AON + 0x54) == 1
+        for offset, mask in ((8, 0x7fff3f3f), (12, 0x003f3f3f)):
+            m.write(AON + offset, 0xffffffff)
+            assert m.read(AON + offset) == mask
+            m.command('writeb %#x 4' % (AON + offset + 1))
+            assert m.read(AON + offset) == (mask & ~0xff00) | 0x400
         m.write(AON + 0x98, 0x38)
         m.write(AON + 0x190, 4)
         assert m.read(AON + 0x190) == 4

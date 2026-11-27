@@ -546,14 +546,21 @@ class Run(AbstractContextManager):
         self.tasks.append(task)
         return task.wait(timeout=timeout)
 
-    def modem(self, modem, *, sim_present=None):
-        """Observe a board modem or change SIM presence in this run."""
+    def modem(self, modem, *, sim_present=None, network_enabled=None, usb_generation=None):
+        """Observe the modem or apply one setting to the observed run and USB generation."""
         params = {"modem": modem}
-        if sim_present is not None:
-            if not isinstance(sim_present, bool):
-                raise ValueError("sim_present must be bool")
-            params["sim_present"] = sim_present
-        return self._call("modem", params, mutation=sim_present is not None)
+        if sim_present is not None and network_enabled is not None:
+            raise ValueError("change one modem setting per request")
+        for name, value in (("sim_present", sim_present), ("network_enabled", network_enabled)):
+            if value is not None:
+                if not isinstance(value, bool):
+                    raise ValueError(f"{name} must be bool")
+                params[name] = value
+        if usb_generation is not None:
+            if type(usb_generation) is not int or not 0 <= usb_generation < 2 ** 64:
+                raise ValueError("usb_generation must be an unsigned 64-bit integer")
+            params["usb_generation"] = usb_generation
+        return self._call("modem", params, mutation=sim_present is not None or network_enabled is not None)
 
     def rotary(self, rotary, detents, *, edge_ms=10, timeout=10):
         """Deliver quadrature detents; positive rotation makes A lead B."""

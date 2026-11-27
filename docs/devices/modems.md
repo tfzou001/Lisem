@@ -1,4 +1,4 @@
-# UART 蜂窝模组
+# 蜂窝模组
 
 ML307C-GC-CN 模型通过板型 JSON 按需安装，接线见[板型说明](../boards.md#uart-蜂窝模组)。
 模型提供理想蜂窝注册环境和真实宿主 IPv4 TCP／UDP 转发，固件仍执行 UART
@@ -46,3 +46,22 @@ Socket ID 为 1～5。TCP 单次发送最多 1460 字节、读取最多 4096 字
 `MIPSEND` 确认表示模组接受了数据，不表示远端已处理。连接、DNS 和发送负载
 有有界宿主期限；宿主异步请求有数量上限，关闭或模组复位后的旧请求不能复活连接。
 TLS 明文及密钥不由模组解释，业务成功须根据真实网络响应单独验证。
+
+## NT26K0B1 USB ECM
+
+Snap-Learn 的 `cellular` 通过 USB AT 和 CDC ECM 接口提供模组控制及以太网传输。
+固件配置 USB、发起拨号并运行 DHCP。宿主桥接按当前运行独立启用。
+以下命令先读取 `usb_generation`，再用读到的值设置转发：
+
+```sh
+lisem modem INSTANCE_ID cellular --run RUN_ID
+lisem modem INSTANCE_ID cellular --run RUN_ID --usb-generation GENERATION --network-enabled true
+```
+
+用 `--sim-present false` 或 `true` 拔插 SIM，每次只改变一项。USB 重置或
+重新枚举后须重新读取代次。`usb_configured`、`pdp_active`、`network_enabled`
+分别表示 USB 配置、模组数据会话及宿主转发开关，`ecm_tx_frames`、
+`ecm_rx_frames` 记录固件发送和收到的以太网帧。
+
+NT26 的网络数据经 ECM 传输，TCP、TLS 和应用协议在固件侧运行。模组专有的
+AT socket offload 尚未实现；选择 `cellular_at` 的固件业务会收到命令错误。

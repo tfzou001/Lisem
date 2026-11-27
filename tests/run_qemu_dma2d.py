@@ -10,7 +10,7 @@ OUTPUT = ROOT / 'artifacts/qemu' / ('dma2d-' + time.strftime('%Y%m%d-%H%M%S'))
 RAM = 0x20028000
 
 
-def start(m, ch, capacity):
+def start(m, ch, capacity, control=0x6307c283):
     m.write(AP + 8, m.read(AP + 8) | 0x4000)
     index = ch - 6
     m.write(DMA + 0x114 + index * 16, BASE + 0x1800)
@@ -19,7 +19,7 @@ def start(m, ch, capacity):
     m.write(DMA + ([0x1e8, 0x1ec, 0x218, 0x21c][index]), capacity)
     m.write(DMA + 0x270, m.read(DMA + 0x270) & ~(3 << (2 * ch)) | 2 << (2 * ch))
     m.write(DMA + 0x2a4, 1)
-    m.write(DMA + ch * 4, 0x6307c283)
+    m.write(DMA + ch * 4, control)
 
 
 def memory(m, words):
@@ -57,6 +57,49 @@ def functional():
             assert not m.read(DMA + 0x1fc) & (1 << 22)
         finally: m.close()
     print('DMA2D channels6..9: peripheral EOF, partial burst, exact entropy, RAM guards and IRQ77/W1C: PASS')
+
+
+def counted_stream():
+    for capacity in (3, 128):
+        m = Machine(OUTPUT / f'counted-{capacity}')
+        try:
+            pixels, expected = configure(m, gray=True, columns=29)
+            words = (len(expected) + 3) // 4
+            assert 3 < words < 128
+            src = RAM + 0x1000
+            write_bytes(m, src, pixels)
+            write_bytes(m, RAM, b'\xa5' * 520)
+            start(m, 8, capacity, 0x6003c283)
+            # Channel 7 supplies pixel words to the codec in two slices.
+            half = len(pixels) // 2
+            for offset in (0, half):
+                m.write(DMA + 0x124, src + offset)
+                m.write(DMA + 0x12c, BASE + 0x1000)
+                m.write(DMA + 0x48, half // 4)
+                m.write(DMA + 0x1ec, half // 4)
+                m.write(DMA + 0x270, m.read(DMA + 0x270) | (2 << 14))
+                m.write(DMA + 0x1c, 0x7003c493)
+                step(m, 100000)
+                assert m.read(DMA + 0x2ac) & 2
+                m.write(DMA + 0x2a8, 0x22)
+                if offset == 0:
+                    assert m.read(BASE + 0x40) == 0 and m.read(RAM) == 0xa5a5a5a5
+            taken = min(words, capacity)
+            assert memory(m, taken)[:min(len(expected), capacity * 4)] == expected[:capacity * 4]
+            assert m.read(RAM + 4 * taken) == 0xa5a5a5a5
+            assert m.read(BASE + 0x1c) == len(expected)
+            m.write(DMA + 0x1f8, 8 << 4)
+            if capacity < words:
+                assert m.read(DMA + 0x1fc) == 0 and irq(m, 77)
+                assert not m.read(BASE + 0x40) & 8
+            else:
+                assert m.read(DMA + 0x1fc) == (1 << 22) | (capacity - words)
+                assert not irq(m, 77) and m.read(BASE + 0x40) & 8
+                m.write(DMA + 0x20, m.read(DMA + 0x20) | 4)
+                assert m.read(DMA + 0x1fc) == capacity - words
+        finally:
+            m.close()
+    print('DMA2D counted JPEG: pixel slices, capacity IRQ, short JPEG residue and stop: PASS')
 
 
 def cancellation():
@@ -119,7 +162,6 @@ def rejection():
     for name, commands in [
         ('half-irq', ['writel 0x459002a4 16', 'writel 0x45900018 0x6307c283']),
         ('image-transform', ['writel 0x459002b0 1']),
-        ('software-flow', ['writel 0x45900018 0x6303c283']),
         ('ping-pong', ['writel 0x45900018 0x6307da83']),
         ('partial-register', ['writeb 0x45900018 1']),
         ('bad-channel', ['writel 0x459001f8 0xa0', 'readl 0x459001fc']),
@@ -136,4 +178,4 @@ def rejection():
 
 
 if __name__ == '__main__':
-    functional(); cancellation(); short_counts(); rejection()
+    functional(); counted_stream(); cancellation(); short_counts(); rejection()

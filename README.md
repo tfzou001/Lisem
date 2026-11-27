@@ -45,7 +45,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Lisem.app
 
 | 芯片 | 平台 | 内置板型 |
 | --- | --- | --- |
-| LS2684 | Arcs | Arcs-Mini、Arcs-EVB |
+| LS2684 | Arcs | Arcs-Mini、Arcs-EVB、Snap-Learn HK626 V1.2 |
 | LS2663 | Arcs | Arcs-Mini3 |
 | CSK7004J8U | VenusA | VenusA RD EVB |
 

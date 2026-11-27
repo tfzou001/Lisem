@@ -16,27 +16,28 @@ def setup(m):
     m.write(BASE + 0x2c, 5 | (200 << 4))
 
 
-def transfer(m, data=None, receive=0, stop=True, address=0x21, reset=True):
+def transfer(m, data=None, receive=0, stop=True, address=0x21, reset=True,
+             bus=BASE, irq=43):
     if reset:
-        m.write(BASE + 0x28, 5)
+        m.write(bus + 0x28, 5)
     else:
-        m.write(BASE + 0x18, 0x3f8)
-    m.write(BASE + 0x1c, address)
+        m.write(bus + 0x18, 0x3f8)
+    m.write(bus + 0x1c, address)
     count = receive or len(data or [])
-    m.write(BASE + 0x24, 0x1800 | (0x200 if stop else 0) |
+    m.write(bus + 0x24, 0x1800 | (0x200 if stop else 0) |
             (0x400 if count else 0) | (0x100 if receive else 0) | count)
     for value in data or []:
-        m.write(BASE + 0x20, value)
-    m.write(BASE + 0x14, 0x200)
-    m.write(BASE + 0x28, 1)
-    assert not m.read(BASE + 0x18) & 0x200
+        m.write(bus + 0x20, value)
+    m.write(bus + 0x14, 0x200)
+    m.write(bus + 0x28, 1)
+    assert not m.read(bus + 0x18) & 0x200
     m.command('clock_step 1000000')
-    status = m.read(BASE + 0x18)
+    status = m.read(bus + 0x18)
     assert status & 0x200
-    assert m.command('readb 0xe00210ac') == 1
-    m.write(BASE + 0x18, 0x200)
-    assert m.command('readb 0xe00210ac') == 0
-    return status, [m.read(BASE + 0x20) for _ in range(receive)]
+    assert m.command('readb %#x' % (0xe0021000 + 4 * irq)) == 1
+    m.write(bus + 0x18, 0x200)
+    assert m.command('readb %#x' % (0xe0021000 + 4 * irq)) == 0
+    return status, [m.read(bus + 0x20) for _ in range(receive)]
 
 
 def reg_read(m, reg, count=1):

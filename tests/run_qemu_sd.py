@@ -78,14 +78,14 @@ def rejection():
     print('Reserved and crossing SDHCI accesses rejected: PASS')
 
 
-def card_image(hart=0, board="arcs-mini"):
-    no_detect = board == "arcs-mini"
+def card_image(hart=0, board="arcs-mini", assembly=None):
+    no_detect = board == "arcs-mini" or assembly is not None
     case = "%s-hart%d" % (board, hart)
     image = OUTPUT / (case + '.img')
     image.parent.mkdir(parents=True, exist_ok=True)
     with image.open('wb') as f:
         f.truncate(64 * 1024 * 1024)
-    m = Machine(OUTPUT / case, hart=hart, board=board, sd_slot=True, budget_ns=10_000_000_000)
+    m = Machine(OUTPUT / case, hart=hart, board=board, assembly=assembly, sd_slot=True, budget_ns=10_000_000_000)
     try:
         m.qmp_command('blockdev-change-medium', {'device': 'sdcard', 'filename': str(image),
                                                'format': 'raw', 'read-only-mode': 'read-write'})
@@ -109,6 +109,13 @@ def card_image(hart=0, board="arcs-mini"):
             assert not (m.read(BASE + 0x30) & 0xffff8000), hex(m.read(BASE + 0x30))
             assert m.read(BASE + 0x30) & 1
             return m.read(BASE + 16)
+        if assembly is not None:
+            # An inserted card still needs CLK/CMD on AF15 to answer CMD8.
+            m.write(BASE + 8, 0x1aa)
+            m.command('writew 0x45a0000e 0x802')
+            assert m.read(BASE + 0x30) & 0x10000
+            for pad in (5, 6, 7):
+                m.write(0x47500000 + 4 * pad, 15)
         command(0, flags=0)
         assert command(8, 0x1aa) == 0x1aa
         command(55)
@@ -116,6 +123,19 @@ def card_image(hart=0, board="arcs-mini"):
         command(2, flags=1)
         rca = command(3) & 0xffff0000
         command(7, rca, 3)
+        if assembly is not None:
+            # Four-bit data on a single-lane slot cannot complete a sector read.
+            m.command('writeb 0x45a00028 2')
+            m.command('writew 0x45a00004 512')
+            m.command('writew 0x45a00006 1')
+            m.command('writew 0x45a0000c 0x12')
+            m.write(BASE + 0x30, 0xffffffff)
+            m.write(BASE + 8, 0)
+            m.command('writew 0x45a0000e 0x113a')
+            status = m.read(BASE + 0x30)
+            assert status & (1 << 20) and not status & 2, hex(status)
+            m.command('writeb 0x45a00028 0')
+            command(12, flags=3)
         # PIO writes reach the selected card sector and survive eject.
         m.command('writew 0x45a00004 512')
         m.command('writew 0x45a00006 1')
@@ -268,3 +288,6 @@ if __name__ == '__main__':
     card_image(0)
     card_image(1)
     card_image(0, "arcs-evb")
+    card_image(0, "arcs-board", {"version": 1, "chip": "ls2684", "buttons": [],
+                                 "indicators": [], "sd": {"bus_width": 1,
+                                 "pads": {"CLK": 6, "CMD": 7, "DAT0": 5}}})

@@ -185,8 +185,23 @@ ST7789 的显示 RAM 为 240 × 320，面板的 `viewport` 指定可见区域的
 
 这段配置须与完整板型合并。每根 UART 网络仅连接一个芯片焊盘和模组端口，
 不支持与 SD 等器件共线。每个板型最多一个模组；安装后
-UART2 由模组占用，不提供宿主串口连接或字节注入。内置板型不默认安装模组。
+UART2 由模组占用，不提供宿主串口连接或字节注入。
 具体命令、网络与 SIM 限制见 [UART 蜂窝模组](devices/modems.md)。
+
+## Snap-Learn HK626 V1.2
+
+选择内置板型 `snap-learn` 并导入对应的 LPK。接线依据应用的
+`hardware/HK626-V1.2.pdf` 第 3、6 页。该板型使用 JD9853 屏幕、BL6138
+触控和 OV2659 摄像头。摄像头的 HSYNC、VSYNC、PCLK 依次接 PA10、PA11、
+PA12，D0–D7 依次接 PA13–PA20，PWDN 下拉。TF 卡只连接 CLK、CMD、DAT0。
+Type-C 引出 UART0（PA2、PA3）。电源键接 PB4，四个功能键共用 PB7 上的
+电阻网络。PB8 为电源保持，PA1 控制功放，MIC0 接麦克风，MIC1 接功放后
+的 AEC 电参考。实例可设置电池电压和低有效充电检测信号。完整板型见
+[板型 JSON](../boards/snap-learn.json)。
+
+NT26K0B1 使用 `chip.usb0.host` 到模组 `usb` 的连接。上电后可在设备设置中
+切换 SIM 和宿主网络桥接，查看 USB 配置、PDP 状态及 ECM 帧计数。ECM 宿主
+转发每次上电默认为关闭。命令行操作见[蜂窝模组](devices/modems.md#nt26k0b1-usb-ecm)。
 
 ## 更新已有板型
 

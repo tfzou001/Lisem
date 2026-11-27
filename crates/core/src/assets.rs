@@ -322,6 +322,7 @@ pub struct Capabilities {
     pub wifi: bool,
     pub sd: bool,
     pub usb_adb: bool,
+    pub usb_ecm: bool,
     pub download: bool,
     pub signals: bool,
     pub signal_trace: bool,
@@ -339,6 +340,7 @@ pub struct Backend {
     sequence_ids: Vec<String>,
     pub rotaries: Vec<String>,
     touch_property: Option<String>,
+    bl6138_flash: bool,
     flash: String,
     flash_devices: Vec<storage::FlashDevice>,
     clock_quantum_ns: Option<u64>,
@@ -513,6 +515,7 @@ impl Backend {
             rotaries: board["rotaries"].as_array().into_iter().flatten()
                 .filter_map(|v| v["id"].as_str().map(str::to_owned)).collect(),
             touch_property,
+            bl6138_flash: board["touch"]["model"] == "bl6138",
             touch_size,
             flash,
             clock_quantum_ns,
@@ -538,6 +541,9 @@ impl Backend {
             if key.to_string_lossy().starts_with(&self.environment_prefix) {
                 command.env_remove(key);
             }
+        }
+        if self.bl6138_flash {
+            command.env(self.env("BL6138_FLASH"), instance.join("bl6138-flash.bin"));
         }
         command
             .args([

@@ -586,6 +586,43 @@ impl Desktop {
                     )
                     .child(caption(self.camera_notice(d))),
             )));
+        if let Some(id) = d.hardware["board"]["assembly"]["modem"]["id"].as_str()
+            .filter(|_| d.capabilities.usb_ecm) {
+            let modem = &self.state.data["session"]["devices"][id];
+            let ready = self.powered() && modem["usb_generation"].is_u64();
+            let mut controls = div().flex().flex_col().items_start().gap_2();
+            for (control_id, field, label) in [
+                ("settings-ecm", "network_enabled", "宿主网络桥接"),
+                ("settings-modem-sim", "sim_present", "SIM 卡已插入"),
+            ] {
+                let mut params = self.params();
+                params["modem"] = json!(id);
+                params["usb_generation"] = modem["usb_generation"].clone();
+                params[field] = json!(modem[field] != true);
+                controls = controls.child(Switch::new(control_id)
+                    .label(label)
+                    .checked(ready && modem[field] == true)
+                    .disabled(!ready || self.control_busy(&["modem"]))
+                    .on_change(cx.listener(move |v, _, _, cx| {
+                        v.send("modem", params.clone());
+                        cx.notify();
+                    })));
+            }
+            if ready {
+                let link = if modem["usb_configured"] != true {
+                    "等待 USB 枚举"
+                } else if modem["pdp_active"] == true {
+                    "PDP 已激活"
+                } else {
+                    "USB 已配置"
+                };
+                controls = controls.child(caption(format!(
+                    "{link} · 发送 {} 帧 · 接收 {} 帧",
+                    modem["ecm_tx_frames"], modem["ecm_rx_frames"]
+                )));
+            }
+            body = body.child(settings_row("USB 蜂窝模组", controls));
+        }
         body = body.when(d.capabilities.usb_adb, |body| body.child(settings_row(
             "USB",
             div().flex().flex_col().items_start().gap_2()

@@ -36,6 +36,11 @@ def functional(hart):
     m = Machine(OUTPUT / ('hart%d' % hart), hart=hart, budget_ns=10**18)
     try:
         m.write(DM + 0x4a4, 0x3fff3fff); assert m.read(DM + 0x4a4) == 0x3fff3fff
+        for offset, timing in ((0x400, 0x100), (0x48c, 0x690c5a), (0x490, 0xd04),
+                               (0x610, 0xc010), (0x618, 0x010000c0)):
+            m.write(DM + offset, timing)
+            assert m.read(DM + offset) == timing
+        assert not irq(m)
         assert sample(m) == (0, 624)
         for phase in (0, 1, 337, 499):
             m.qmp_command('system_reset'); step(m, phase)
@@ -54,6 +59,8 @@ def functional(hart):
         step(m, 1); assert m.read(DM + 0x100) == 0 and m.read(DM + 0x104) == 0
         assert sample(m) == (1, 624)
         m.write(DM, 0x80000000); assert sample(m) == (1, 624)
+        m.write(DM, 0xd0000000)
+        assert m.read(DM) == 0 and sample(m) == (0, 624)
         # Software IRQ, masked pending, independent W1C and FIFO still empty.
         m.write(DM, 0x08000000)
         assert m.read(DM + 0x1c) == 8 and not irq(m)
@@ -103,7 +110,7 @@ def functional(hart):
 
 def rejection():
     sequences = [
-        ['writel 0x4a0004a4 0x4000'], ['writel 0x4a000400 0x100'], ['readb 0x4a000100'], ['readl 0x4a000001'], ['readl 0x4a000200'],
+        ['writel 0x4a0004a4 0x4000'], ['writel 0x4a000400 0x400000'], ['readb 0x4a000100'], ['readl 0x4a000001'], ['readl 0x4a000200'],
         ['writel 0x4a000000 1'], ['writel 0x4a00002c 1'], ['writel 0x4a000030 1'],
         ['writel 0x4a000100 0x10000000'], ['writel 0x4a0000e8 0x10000000'],
         ['writel 0x4a0000ec 625'], ['writel 0x4a000800 0x04000000'],

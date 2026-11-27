@@ -49,6 +49,12 @@ struct Modem {
     /// Omit to observe; changes last only for this run.
     #[serde(skip_serializing_if = "Option::is_none")]
     sim_present: Option<bool>,
+    /// Enable or disable the USB ECM internet bridge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    network_enabled: Option<bool>,
+    /// Required for either USB modem mutation. Obtain from the preceding observation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    usb_generation: Option<u64>,
 }
 #[derive(Deserialize, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -508,7 +514,7 @@ fn tools() -> Vec<Tool> {
         definition::<lisem_core::rotary::Request>("lisem_rotary",
             "Rotate a board quadrature encoder on virtual time. Positive detents make A lead B; sends physical GPIO phases, not firmware key events. Poll status with the returned sequence and run; cancel retains delivered edges and physical phase. Reset cancels remaining motion. Completion means input delivery only. Rejects overlapping motion and stale controls.", false),
         definition::<Modem>("lisem_modem",
-            "Observe a board UART modem or change SIM presence for the current run. Removing SIM deactivates PDP and closes real host sockets. Does not synthesize unverified SIM hot-plug URCs. Registration is an ideal cellular environment, not proof of internet or cloud success. Host forwarding requires start network=true. Firmware owns AT commands and application protocols.", false),
+            "Observe the modem on the current run or change one setting. USB ECM SIM and internet bridge changes require the observed usb_generation. UART modem SIM control uses the run alone.", false),
         definition::<Signals>("lisem_signals",
             "Enumerate or edit typed external board inputs. Digital values drive GPIO levels; voltage values pass through the board divider and ADC; illuminance values set the optical scene measured by the board sensor. Changes are saved per instance after runtime confirmation and survive reset. A pending response is not confirmation: poll this tool until change.request matches and status is applied or rejected. Firmware interprets inputs; inspect its response separately.", false),
         definition::<lisem_core::signal_trace::Request>("lisem_signal_trace",
