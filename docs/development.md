@@ -39,7 +39,7 @@ QEMU 修改提交到 `LISTENAI/qemu` 的 `listenai` 分支，再更新本仓库�
 背压与取消，并核对静态图片经 DVP FIFO/GPDMA 写入 RAM 的字节、内存边界、
 帧快照、SOF/EOF 中断及复位取消。共享输入另覆盖连续发布、代际隔离、SOF
 锁存、丢帧／重复计数和断开／重连。固件拍照还需通过原 LPK 的业务入口验证。
-`make qemu-hk626-display qemu-ov2659 qemu-nt26` 验证 HK626 的显示与触摸、
+`make qemu-jd9853-bl6138 qemu-ov2659 qemu-nt26` 验证 JD9853 显示与 BL6138 触摸、
 OV2659 在三种分辨率下的 DVP 数据及 NT26 的 USB 枚举与 ECM 收发。
 `make qemu-wifi-wpa2 qemu-hsu` 验证 EAPOL 密钥确认、CCMP 独立向量、GTK
 广播 DHCP、MIC/PN 拒绝、取消和密钥替换边界。固件使用
@@ -334,26 +334,6 @@ lisem python -- tests/run_ble_firmware.py --binary /path/to/lisem --lpk /path/to
 关联/授权和 IP 判定业务结果。原始链路证据由调用方显式启用并持续读取，
 检查 HistoryLost、运行身份及最终清理结果。Python 接口见
 [BLE API](../python/docs/ble.md)。
-
-Snap-Learn HK626 V1.2 的应用验证需要双网 LPK，包含 JD9853、BL6138、
-OV2659 和 NT26 驱动、触控升级资源及应用的串口测试命令。使用随包 CLI，
-将输出写入新目录：
-
-```sh
-python3 tests/run_snap_learn_firmware.py --binary /path/to/lisem \
-  --lpk /path/to/snap-learn.lpk --output artifacts/verify-snap-learn
-```
-
-测试新建实例和空白 TF 镜像，由固件升级触控、格式化卡、记录和回放触点，
-并核对按键、麦克风文件输入、三次冷启动后的 OTP、UID 和触控 Flash。
-Wi-Fi 和 ECM 分别通过固件配置启用并获取 DHCP 租约。追加
-`--http-host <宿主网卡的 IPv4 地址>` 可让固件通过各自的默认路由访问临时
-HTTP 服务；两次请求均校验宿主收到的路径和固件收到的字节数。诊断 UART、
-首页截图、实例和 TF 镜像保存在输出目录中。
-
-追加 `--photo` 时，测试使用生成的色条作为传感器场景。固件连接语音云、
-开放拍题入口后，测试经触屏进入 320×240 预览，按 AI 键触发 1280×960
-分片采集，核对固件完成缩略图解码后报告的 JPEG 尺寸和首尾标记。
 
 `make qemu-wifi-doze` 验证 Beacon/DTIM 相位、休眠与唤醒中断、接收隔离及
 取消。Mini 固件提供 `power_policy status` 且配置五分钟待机时，可准备一个

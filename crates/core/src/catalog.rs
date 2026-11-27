@@ -98,19 +98,17 @@ impl Catalog {
         let id = board["id"].as_str().unwrap();
         ensure!(!self.root.join("boards").join(format!("{id}.json")).exists(),
             "Installed board IDs cannot be replaced; choose a custom board ID");
-        ensure!(self.chips.contains_key(board["chip"].as_str().unwrap()), "Unknown chip");
         let _index = MetadataLease::acquire(&self.data.join("library.lock"))?;
         self.reload_hardware()?;
+        let chip = self.chips.get(board["chip"].as_str().unwrap()).context("Unknown chip")?;
+        let layout = Self::board_layout(&board, chip)?;
         let mut leases = Vec::new();
         for entry in self.entries()? {
             let instance = Path::new(entry["path"].as_str().context("Instance path missing")?);
             let metadata = self.metadata(instance)?;
             if metadata["hardware"]["board"]["id"] == id {
-                let old = self.layout(id)?;
-                ensure!(serde_json::to_value(old.flashes())? == board["flash_devices"]
-                    && metadata["hardware"]["chip"]["id"] == board["chip"],
-                    "Board update changes chip or persistent storage geometry");
-                leases.push(storage::locked(instance, &old)?);
+                check_storage_geometry(&metadata["hardware"], &board, chip)?;
+                leases.push(storage::locked(instance, &layout)?);
             }
         }
         let directory = self.data.join("boards");
@@ -126,6 +124,10 @@ impl Catalog {
             .chips
             .get(board["chip"].as_str().context("Board chip missing")?)
             .context("Unknown chip")?;
+        Self::board_layout(board, chip)
+    }
+
+    fn board_layout(board: &Value, chip: &Value) -> Result<Layout> {
         // NOR geometry belongs to board devices; OTP geometry belongs to the chip.
         // All LS26 variants share the same OTP geometry and UID layout.
         let defaults = match chip["family"].as_str() {
@@ -586,24 +588,7 @@ impl Catalog {
             .get(board["chip"].as_str().context("Missing chip")?)
             .context("Chip not supported")?;
         if board.get("definition").is_some() {
-            let previous = crate::board::source(&saved["board"]);
-            let previous_flashes = if previous.get("schema_version").is_some() {
-                serde_json::to_value(crate::board::flash_devices(previous)?)?
-            } else {
-                json!([crate::storage::FlashDevice::new("flash0", 0,
-                    previous["flash_bytes"].as_u64().context("Previous Flash size missing")? as usize)])
-            };
-            ensure!(previous["chip"] == board["chip"] && saved["board"]["chip"] == board["chip"]
-                && saved["chip"]["id"] == chip["id"] && saved["chip"]["family"] == chip["family"]
-                && previous_flashes == board["flash_devices"]
-                && (saved["board"]["flash_bytes"].is_null() || saved["board"]["flash_bytes"] == board["flash_bytes"]),
-                "Board chip or persistent storage geometry changed");
-            for (field, default) in [("otp_bytes",512), ("uid_offset",8), ("uid_bytes",8)] {
-                let fallback = if chip["family"] == "arcs" { Some(default) } else { None };
-                ensure!(saved["chip"]["storage"][field].as_u64().or(fallback)
-                    == chip["storage"][field].as_u64().or(fallback),
-                    "Chip persistent storage geometry changed");
-            }
+            check_storage_geometry(&saved, board, chip)?;
             return Ok(json!({"board":board,"chip":chip}));
         }
         saved["chip"]
@@ -659,6 +644,28 @@ impl Catalog {
         );
         Ok(expected)
     }
+}
+
+fn check_storage_geometry(saved: &Value, board: &Value, chip: &Value) -> Result<()> {
+    let previous = crate::board::source(&saved["board"]);
+    let previous_flashes = if previous.get("schema_version").is_some() {
+        serde_json::to_value(crate::board::flash_devices(previous)?)?
+    } else {
+        json!([crate::storage::FlashDevice::new("flash0", 0,
+            previous["flash_bytes"].as_u64().context("Previous Flash size missing")? as usize)])
+    };
+    ensure!(previous["chip"] == board["chip"] && saved["board"]["chip"] == board["chip"]
+        && saved["chip"]["id"] == chip["id"] && saved["chip"]["family"] == chip["family"]
+        && previous_flashes == board["flash_devices"]
+        && (saved["board"]["flash_bytes"].is_null() || saved["board"]["flash_bytes"] == board["flash_bytes"]),
+        "Board chip or persistent storage geometry changed");
+    for (field, default) in [("otp_bytes",512), ("uid_offset",8), ("uid_bytes",8)] {
+        let fallback = if chip["family"] == "arcs" { Some(default) } else { None };
+        ensure!(saved["chip"]["storage"][field].as_u64().or(fallback)
+            == chip["storage"][field].as_u64().or(fallback),
+            "Chip persistent storage geometry changed");
+    }
+    Ok(())
 }
 
 fn hardware_identity(mut value: Value) -> Value {

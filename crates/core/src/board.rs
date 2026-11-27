@@ -1492,17 +1492,19 @@ mod tests {
     }
 
     #[test]
-    fn snap_learn_compiles_physical_wiring_and_rejects_extra_sd_lanes() {
-        let mut board: Value = serde_json::from_str(include_str!("../../../boards/snap-learn.json")).unwrap();
+    fn single_lane_sd_and_nor_part_geometry() {
+        let mut board = json!({"schema_version":1,"id":"storage-test","name":"Storage","chip":"ls2684",
+            "devices":{
+                "sd":{"model":"sd-card-slot","parameters":{"bus_width":1}},
+                "flash0":{"model":"spi-nor","parameters":{
+                    "capacity_bytes":16777216,"chip_select":0,"part":"xm25qh128c"}}},
+            "nets":{"CLK":{"endpoints":["chip.PA6","sd.CLK"]},
+                    "CMD":{"endpoints":["chip.PA7","sd.CMD"]},
+                    "DAT0":{"endpoints":["chip.PA5","sd.DAT0"]}},
+            "links":[{"from":"chip.flash.data","to":"flash0.bus"}]});
         let compiled = compile(&board).unwrap();
-        let plan = &compiled["assembly"];
-        assert_eq!(plan["nor"][0]["part"], "xm25qh128c");
-        assert_eq!(plan["sd"]["pads"], json!({"CLK":6,"CMD":7,"DAT0":5}));
-        assert_eq!(plan["keypad"]["channel"], 9); // PB7 = external VIN5.
-        assert_eq!(plan["camera"]["pads"]["PCLK"], 12);
-        for lane in 0..8 {
-            assert_eq!(plan["camera"]["pads"][format!("D{lane}")], 13 + lane);
-        }
+        assert_eq!(compiled["assembly"]["nor"][0]["part"], "xm25qh128c");
+        assert_eq!(compiled["assembly"]["sd"]["pads"], json!({"CLK":6,"CMD":7,"DAT0":5}));
         board["nets"]["spare"] = json!({"endpoints":["sd.DAT1"]});
         assert!(compile(&board).is_err());
         board["nets"].as_object_mut().unwrap().remove("spare");
@@ -1693,7 +1695,22 @@ mod tests {
 
     #[test]
     fn jd9853_bl6138_routes_and_metadata() {
-        let raw: Value = serde_json::from_str(include_str!("../../../boards/snap-learn.json")).unwrap();
+        let mut raw = json!({"schema_version":1,"id":"panel-test","name":"Panel","chip":"ls2684",
+            "storage":{"flash_bytes":16777216},
+            "devices":{
+                "lcd":{"model":"jd9853","parameters":{}},
+                "panel":{"model":"display-panel","parameters":{
+                    "viewport":{"x":0,"y":0,"width":240,"height":320},"rotation_clockwise":180}},
+                "light":{"model":"backlight","parameters":{"active_level":1}},
+                "touch":{"model":"bl6138","parameters":{"rotation_clockwise":0}}},
+            "nets":{},"links":[{"from":"lcd.pixels","to":"panel.pixels"},
+                               {"from":"light.brightness","to":"panel.brightness"}]});
+        for (port, pad) in [("lcd.SCK","PA25"), ("lcd.SDI","PA24"), ("lcd.CS","PA22"),
+                            ("lcd.DC","PA23"), ("lcd.RESET","PA9"), ("lcd.TE","PA8"),
+                            ("light.EN","PA0"), ("touch.SCL","PB1"), ("touch.SDA","PB0"),
+                            ("touch.INT","PA27"), ("touch.RESET","PA4")] {
+            raw["nets"][pad] = json!({"endpoints":[format!("chip.{pad}"), port]});
+        }
         let board = compile(&raw).unwrap();
         let panel = &board["assembly"]["panel"];
         assert_eq!(panel["model"], "jd9853");
@@ -1703,13 +1720,10 @@ mod tests {
         assert_eq!(board["touch"]["address"], "0x2c");
         assert_eq!(board["touch"]["rotation_clockwise"], 0);
         let mut wrong = raw.clone();
-        let net = wrong["nets"].as_object_mut().unwrap().values_mut()
-            .find(|net| net["endpoints"].as_array().unwrap().contains(&json!("lcd.SCK"))).unwrap();
-        net["endpoints"][0] = json!("chip.PA2");
+        wrong["nets"]["PA25"]["endpoints"][0] = json!("chip.PA2");
         assert!(compile(&wrong).is_err());
         let mut wrong = raw;
-        wrong["nets"].as_object_mut().unwrap().retain(|_, net|
-            !net["endpoints"].as_array().unwrap().contains(&json!("touch.RESET")));
+        wrong["nets"].as_object_mut().unwrap().remove("PA4");
         assert!(compile(&wrong).is_err());
     }
 
@@ -2017,6 +2031,10 @@ mod tests {
         crate::storage::write_json(&path, &raw).unwrap();
         let lease =
             crate::storage::locked(instance, &catalog.layout("mini-custom").unwrap()).unwrap();
+        // The original descriptor may no longer ship with the runtime.
+        std::fs::remove_file(catalog.data.join("boards/mini-custom.json")).unwrap();
+        catalog.reload_hardware().unwrap();
+        assert!(catalog.layout("mini-custom").is_err());
         assert!(catalog.import_board(&path).is_err());
         drop(lease);
         catalog.import_board(&path).unwrap();

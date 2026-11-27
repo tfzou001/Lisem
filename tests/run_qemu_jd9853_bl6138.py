@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""JD9853 scanout and BL6138 flash/point protocol through HK626 pad routes."""
+"""JD9853 scanout and BL6138 flash/point protocol through LS26 pad routes."""
 import time
 
 from qemu_test import Machine, ROOT
 from run_qemu_display import command, step
 from run_qemu_sc919 import pixel
 
-OUTPUT = ROOT / 'artifacts/qemu' / ('hk626-display-' + time.strftime('%Y%m%d-%H%M%S'))
+OUTPUT = ROOT / 'artifacts/qemu' / ('jd9853-bl6138-' + time.strftime('%Y%m%d-%H%M%S'))
 GPIO = 0x46700000
 I2C = 0x46e00000
 MUX = 0x47500000

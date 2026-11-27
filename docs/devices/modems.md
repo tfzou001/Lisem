@@ -49,9 +49,9 @@ TLS 明文及密钥不由模组解释，业务成功须根据真实网络响应�
 
 ## NT26K0B1 USB ECM
 
-Snap-Learn 的 `cellular` 通过 USB AT 和 CDC ECM 接口提供模组控制及以太网传输。
+NT26K0B1 通过 USB AT 和 CDC ECM 接口提供模组控制及以太网传输。
 固件配置 USB、发起拨号并运行 DHCP。宿主桥接按当前运行独立启用。
-以下命令先读取 `usb_generation`，再用读到的值设置转发：
+以下以板型中的模组 ID `cellular` 为例，先读取 `usb_generation`，再用读到的值设置转发：
 
 ```sh
 lisem modem INSTANCE_ID cellular --run RUN_ID

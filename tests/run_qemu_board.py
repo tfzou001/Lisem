@@ -318,7 +318,7 @@ def analog_keypad():
         m.close()
 
 
-def hk626_storage_and_keys():
+def nor_and_resistor_keypad():
     from run_qemu_storage import command as flash_command
 
     keys = [('ai', 0), ('volume-up', 10000), ('back', 20000), ('volume-down', 30000)]
@@ -329,7 +329,7 @@ def hk626_storage_and_keys():
              'buttons': [{'id': name, 'pad': 39, 'pressed_level': 0, 'released_level': 1,
                           'resistance_ohms': r} for name, r in keys]}
     board['buttons'][0]['diode_drop_uv'] = 300000
-    m = Machine(OUTPUT / 'hk626-storage-keys', board='arcs-board', assembly=board, desktop=True)
+    m = Machine(OUTPUT / 'nor-and-resistor-keypad', board='arcs-board', assembly=board, desktop=True)
     try:
         # A battery/charger update must preserve the idle 3 V keypad pull-up.
         m.qmp_command('qom-set', {'path': '/machine', 'property': 'x-lisa-signals',
@@ -361,4 +361,4 @@ if __name__ == '__main__':
     venusa_camera()
     venusa_camera(subsample=True)
     analog_keypad()
-    hk626_storage_and_keys()
+    nor_and_resistor_keypad()

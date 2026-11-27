@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the HK626 NT26 through the LS26 MUSB host, GPIO and Ethernet bridge."""
+"""Exercise the NT26 through the LS26 MUSB host, GPIO and Ethernet bridge."""
 import json
 import os
 from pathlib import Path
