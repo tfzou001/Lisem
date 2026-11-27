@@ -210,7 +210,7 @@ def venusa_screen():
     spi = 0x43e00000
     try:
         for pad in (16, 19): m.write(0x44100000 + 4 * pad, 5)
-        for pad in (17, 2, 3, 9): m.write(0x44100000 + 4 * pad, 1)
+        for pad in (17, 2, 3, 9): m.write(0x44100000 + 4 * pad, 0)
         m.write(0x43600028, (1 << 17) | (1 << 2) | (1 << 3) | (1 << 9))
         m.write(0x43600024, (1 << 3) | (1 << 9))
         m.write(0x4310001c, 0x13800000)
@@ -262,6 +262,7 @@ def venusa_camera(subsample=False):
                 board='venusa-board', assembly=p, desktop=True)
     bus, dvp = 0x43c00000, 0x42000800
     try:
+        for pad in (1, 2, 3): m.write(0x45100000 + 4 * pad, 6)
         m.write(0x43100034, 0x802)
         for pad in (33,34): m.write(0x44100000 + 4 * pad, 8)
         for pad in (*range(21,32),35): m.write(0x44100000 + 4 * pad, 13)

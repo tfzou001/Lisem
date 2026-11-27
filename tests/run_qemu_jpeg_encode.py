@@ -215,7 +215,7 @@ def rejected():
                 assert report['status'] == 'unsupported-mmio'
             else:
                 assert report['status'] == 'peripheral-error'
-                assert 'ARCS JPEG codec completion rejected:' in log
+                assert 'JPEG codec completion rejected:' in log
                 assert 'ARCS unsupported write' not in log
         finally: m.close()
     print('JPEG encode: undefined symbol, malformed table, mirror, early FIFO and busy table rejected: PASS')

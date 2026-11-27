@@ -270,6 +270,11 @@ def run(path, uplink):
                     budget_ns=10000000000, network_capture=False)
     u = Host(m)
     try:
+        # USB0 is occupied by the board modem throughout enumeration.
+        for bridge, action in [('lab', 'connect'), ('adb', 'enable'), ('cdc', 'enable')]:
+            error = m.qmp_command('qom-set', {'path': '/machine/soc',
+                'property': f'x-lisem-usb-{bridge}', 'value': action}, error=True)
+            assert 'wired to a board device' in error['desc'], error
         m.write(GPIOB + 0x28, (1 << 3) | (1 << 6))
         m.write(GPIOB + 0x2c, 1 << 6)
         # Release firmware keeps PB6 asserted using AON FSEL=2, OEN/OUT force.
